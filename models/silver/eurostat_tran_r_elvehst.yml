@@ -1,0 +1,86 @@
+version: 2
+
+models:
+  - name: eurostat_tran_r_elvehst
+    description: >
+      Eurostat dataset TRAN_R_ELVEHST (road electric vehicles stock).
+      Canonicalized and deduplicated by (geo, year, vehicle, unit, freq) keeping the latest
+      ingest_ts/load_ts/snapshot/source_file.
+      Delta table, partitioned by snapshot, z-ordered by (geo, year, vehicle).
+
+    tests:
+      - rowcount_gt_0:
+          config:
+            name: eurostat_tran_r_elvehst__rowcount_gt_0
+
+      - unique_combination_of_columns:
+          columns: [geo, year, vehicle, unit, freq]
+          config:
+            name: eurostat_tran_r_elvehst__uk_geo_year_vehicle_unit_freq
+
+      - expression_is_true:
+          expression: "year between 1990 and 2100"
+          config:
+            name: eurostat_tran_r_elvehst__year_range
+
+      - expression_is_true:
+          expression: "ingest_ts is not null and load_ts is not null"
+          config:
+            name: eurostat_tran_r_elvehst__ingest_and_load_ts_present
+
+      - expression_is_true:
+          expression: "not (unit = 'PC' and value is not null) or (value between 0 and 100)"
+          config:
+            name: eurostat_tran_r_elvehst__pc_value_0_100
+
+    columns:
+      - name: record_id
+        description: "Deterministic md5 hash of (geo|year|vehicle|unit|freq)."
+        tests: [not_null]
+
+      - name: geo
+        description: "Geographical code (Eurostat geo)."
+        tests: [not_null]
+
+      - name: year
+        description: "Reference year."
+        tests: [not_null]
+
+      - name: vehicle
+        description: "Vehicle category."
+        tests: [not_null]
+
+      - name: unit
+        description: "Unit of measure."
+        tests: [not_null]
+
+      - name: freq
+        description: "Frequency code."
+        tests: [not_null]
+
+      - name: value
+        description: "Metric value (stock/count-like). Expected to be non-negative when present."
+        tests:
+          - non_negative:
+              config:
+                name: eurostat_tran_r_elvehst__value_non_negative
+
+      - name: snapshot
+        description: "Snapshot label/version of the ingest."
+        tests: [not_null]
+
+      - name: dataset
+        description: "Dataset identifier from ingest metadata."
+        tests: [not_null]
+
+      - name: ingest_ts
+        description: "Ingestion timestamp used for dedup ordering."
+        tests: [not_null]
+
+      - name: load_ts
+        description: "Load timestamp used for dedup ordering."
+        tests: [not_null]
+
+      - name: source_file
+        description: "Source file path for lineage/debug."
+        tests: [not_null]

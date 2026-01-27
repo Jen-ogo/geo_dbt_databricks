@@ -1,0 +1,107 @@
+version: 2
+
+models:
+  - name: lau_degurba
+    description: >
+      Eurostat LAU + DEGURBA (Silver, Databricks).
+      Grain: (cntr_code, lau_id, year) latest by (load_ts desc, source_file desc).
+      Geometry:
+        - geom (GEOMETRY, EPSG:4326, fixed with buffer(0) if invalid)
+        - geom_wkt_4326 (STRING debug)
+        - geom_wkt_raw (raw input WKT)
+      Enrichment:
+        - region_code, region from admin_areas (admin_level=4, boundary=administrative) via centroid contains.
+
+    tests:
+      - rowcount_gt_0:
+          config:
+            name: lau_degurba__rowcount_gt_0
+
+      - unique_combination_of_columns:
+          arguments:
+            columns: [cntr_code, lau_id, year]
+          config:
+            name: lau_degurba__uk_cntr_lau_year
+
+    columns:
+      - name: feature_id
+        description: "Stable key: LAU:<cntr_code>:<lau_id>:<year>."
+        tests:
+          - not_null
+          - unique
+
+      - name: cntr_code
+        description: "Country code (e.g., PL, DE)."
+        tests: [not_null]
+
+      - name: lau_id
+        description: "LAU id within country."
+        tests: [not_null]
+
+      - name: year
+        description: "Reference year."
+        tests: [not_null]
+
+      - name: degurba
+        description: "DEGURBA class. Allow null; otherwise expected in {0,1,2,3,9}."
+        tests:
+          - values_in_or_null:
+              arguments:
+                column_name: degurba
+                values: [0, 1, 2, 3, 9]
+              config:
+                name: lau_degurba__degurba_allowlist
+
+      - name: geom_wkt_raw
+        description: "Raw WKT from source (string)."
+        tests:
+          - not_null
+          - wkt_not_empty:
+              arguments:
+                column_name: geom_wkt_raw
+              config:
+                name: lau_degurba__geom_wkt_raw_not_empty
+          - wkt_prefix_any:
+              arguments:
+                column_name: geom_wkt_raw
+                prefixes: ['POLYGON(', 'MULTIPOLYGON(']
+              config:
+                name: lau_degurba__geom_wkt_raw_polygonal_prefix
+
+      - name: geom_wkt_4326
+        description: "WKT derived from geom (debug)."
+        tests:
+          - not_null
+          - wkt_not_empty:
+              arguments:
+                column_name: geom_wkt_4326
+              config:
+                name: lau_degurba__geom_wkt_4326_not_empty
+          - wkt_prefix_any:
+              arguments:
+                column_name: geom_wkt_4326
+                prefixes: ['POLYGON(', 'MULTIPOLYGON(']
+              config:
+                name: lau_degurba__geom_wkt_4326_polygonal_prefix
+
+      - name: is_valid0
+        description: "Validity of raw parsed geom0 before fix."
+        tests: [not_null]
+
+      - name: is_valid_fixed
+        description: "Validity after buffer(0) fix."
+        tests: [not_null]
+
+      - name: region_code
+        description: "Region/country label from admin_areas (join via admin4). Nullable if join not found."
+
+      - name: region
+        description: "Admin4 region name from admin_areas. Nullable if join not found."
+
+      - name: source_file
+        description: "Lineage/debug."
+        tests: [not_null]
+
+      - name: load_ts
+        description: "Load timestamp (dedup ordering)."
+        tests: [not_null]

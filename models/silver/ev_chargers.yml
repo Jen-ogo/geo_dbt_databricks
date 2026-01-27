@@ -1,0 +1,98 @@
+version: 2
+
+models:
+  - name: ev_chargers
+    description: >
+      Canonical OSM EV charging points (Silver, Databricks).
+      other_tags -> tags(map), canonical columns like Snowflake.
+      Dedup: (region_code, region, osm_id) latest by dt/load_ts/source_file.
+      Geometry: geom (EPSG:4326) + geom_wkt_4326 (debug).
+
+    tests:
+      - rowcount_gt_0:
+          config:
+            name: ev_chargers__rowcount_gt_0
+
+    columns:
+      - name: feature_id
+        description: "Stable feature key: 'N' + osm_id."
+        tests:
+          - not_null
+          - unique
+
+      - name: osm_id
+        description: "OSM node id."
+        tests: [not_null]
+
+      - name: region_code
+        description: "Canonical region code (lower(country))."
+        tests: [not_null]
+
+      - name: region
+        description: "Region/voivodeship label from ingest partition."
+        tests: [not_null]
+
+      - name: amenity
+        description: "Amenity from tags (usually charging_station)."
+        tests:
+          - values_in_or_null:
+              arguments:
+                column_name: amenity
+                values:
+                  - charging_station
+                  - charging-station
+                  - device_charging_station
+                  - bicycle_parking
+                  - parking
+                  - construction
+                  - proposed
+              config:
+                name: ev_chargers__amenity_allowlist_or_null
+
+      - name: fee_bool
+        description: "Normalized boolean from tags.fee."
+        tests:
+          - values_in_or_null:
+              arguments:
+                column_name: fee_bool
+                values: [true, false]
+              config:
+                name: ev_chargers__fee_bool_is_boolean_or_null
+
+      - name: capacity
+        description: "Capacity from tags.capacity."
+        tests:
+          - non_negative:
+              arguments:
+                column_name: capacity
+              config:
+                name: ev_chargers__capacity_non_negative
+
+      - name: total_sockets_cnt
+        description: "Derived sockets count."
+        tests:
+          - non_negative:
+              arguments:
+                column_name: total_sockets_cnt
+              config:
+                name: ev_chargers__total_sockets_non_negative
+
+      - name: geom
+        description: "Databricks GEOMETRY (EPSG:4326)."
+        tests: [not_null]
+
+      - name: geom_wkt_4326
+        description: "Debug WKT."
+        tests:
+          - not_null
+          - wkt_not_empty:
+              arguments:
+                column_name: geom_wkt_4326
+              config:
+                name: ev_chargers__geom_wkt_not_empty
+          - wkt_prefix_any:
+              arguments:
+                column_name: geom_wkt_4326
+                prefixes: ['POINT']
+              config:
+                name: ev_chargers__geom_wkt_prefix_point
