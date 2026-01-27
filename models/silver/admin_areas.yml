@@ -1,0 +1,116 @@
+version: 2
+
+models:
+  - name: admin_areas
+    description: |
+      Canonical OSM administrative areas (polygons) in SILVER (Databricks).
+      Source: BRONZE.OSM_ADMIN.
+      Deduplicated by (region_code, region, osm_id) keeping latest by (dt desc, load_ts desc, source_file desc).
+
+      Geometry:
+        - geom (GEOMETRY, EPSG:4326)
+        - geom_wkb (BINARY)
+        - geom_wkt_4326 (STRING debug)  <-- mandatory geo QA column
+
+    tests:
+      - rowcount_gt_0:
+          config:
+            name: admin_areas__rowcount_gt_0
+            
+      - expression_is_true:
+          expression: "admin_level between 1 and 12"
+          config:
+            name: admin_areas__admin_level_1_12
+
+    columns:
+      - name: feature_id
+        description: "Stable feature key: 'A' || osm_id."
+        tests:
+          - not_null
+          - unique
+
+      - name: osm_id
+        description: "OSM id of the admin feature."
+        tests:
+          - not_null
+
+      - name: name
+        description: "Local name (nullable)."
+
+      - name: name_en
+        description: "English name extracted from other_tags (nullable)."
+
+      - name: admin_level
+        description: "OSM admin_level integer."
+        tests:
+          - not_null
+
+      - name: boundary
+        description: "OSM boundary tag (usually 'administrative')."
+        tests:
+          - values_in_or_null:
+              column_name: boundary
+              values: ['administrative']
+              config:
+                name: admin_areas__boundary_allowlist_or_null
+
+      - name: type
+        description: "OSM type field."
+
+      - name: population
+        description: "Population extracted from other_tags (nullable)."
+        tests:
+          - non_negative:
+              config:
+                name: admin_areas__population_non_negative
+
+      - name: population_date
+        description: "Population reference date extracted from other_tags (nullable)."
+
+      - name: other_tags_raw
+        description: "Raw other_tags string."
+
+      - name: geom
+        description: "Databricks GEOMETRY (EPSG:4326)."
+
+      - name: geom_wkb
+        description: "Geometry WKB (binary)."
+
+      - name: geom_wkt_4326
+        description: "WKT geometry (EPSG:4326) debug column."
+        tests:
+          - not_null
+          - wkt_not_empty:
+              column_name: geom_wkt_4326
+              config:
+                name: admin_areas__geom_wkt_not_empty
+          - wkt_prefix_in:
+              column_name: geom_wkt_4326
+              prefixes: ['POLYGON(', 'MULTIPOLYGON(']
+              config:
+                name: admin_areas__geom_wkt_polygonal_prefix
+
+      - name: region_code
+        description: "Country/region code (canonical string)."
+        tests:
+          - not_null
+
+      - name: region
+        description: "Region label/partition."
+        tests:
+          - not_null
+
+      - name: dt
+        description: "Snapshot date used for dedup ordering."
+        tests:
+          - not_null
+
+      - name: source_file
+        description: "Source file path for lineage/debug."
+        tests:
+          - not_null
+
+      - name: load_ts
+        description: "Load timestamp used for dedup ordering."
+        tests:
+          - not_null

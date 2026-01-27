@@ -1,0 +1,122 @@
+version: 2
+
+models:
+  - name: census_grid_2021_europe
+    description: >
+      Census grid 2021 (Europe) in SILVER.
+      Source: BRONZE.CENSUS_GRID_2021_EUROPE.
+      -9999 values are converted to NULL.
+      Geometry is stored as:
+        - geom (Databricks geometry type)
+        - geom_wkb (BINARY)
+        - geom_wkt_4326 (STRING debug)
+
+    tests:
+      - rowcount_gt_0:
+          config:
+            name: census_grid_2021_europe__rowcount_gt_0
+
+    columns:
+      - name: record_id
+        description: "Stable hash key: md5(grd_id|source_file)."
+        tests:
+          - not_null
+          - unique
+
+      - name: grd_id
+        description: "Grid cell identifier."
+        tests: [not_null]
+
+      - name: t
+        description: "Total population (NULL if -9999)."
+        tests:
+          - not_null
+          - non_negative:
+              config:
+                name: census_grid_2021_europe__t_non_negative
+
+      - name: m
+        description: "Male population (NULL if -9999)."
+        tests:
+          - non_negative:
+              config:
+                name: census_grid_2021_europe__m_non_negative
+
+      - name: f
+        description: "Female population (NULL if -9999)."
+        tests:
+          - non_negative:
+              config:
+                name: census_grid_2021_europe__f_non_negative
+
+      - name: y_lt15
+        description: "Population <15 (NULL if -9999)."
+        tests:
+          - non_negative:
+              config:
+                name: census_grid_2021_europe__y_lt15_non_negative
+
+      - name: y_1564
+        description: "Population 15-64 (NULL if -9999)."
+        tests:
+          - non_negative:
+              config:
+                name: census_grid_2021_europe__y_1564_non_negative
+
+      - name: y_ge65
+        description: "Population 65+ (NULL if -9999)."
+        tests:
+          - non_negative:
+              config:
+                name: census_grid_2021_europe__y_ge65_non_negative
+
+      - name: emp
+        description: "Employment count (NULL if -9999)."
+        tests:
+          - non_negative:
+              config:
+                name: census_grid_2021_europe__emp_non_negative
+
+      - name: land_surface
+        description: "Land surface (double)."
+        tests:
+          - non_negative:
+              config:
+                name: census_grid_2021_europe__land_surface_non_negative
+
+      - name: populated
+        description: "Populated flag / count (NULL if -9999)."
+        tests:
+          - non_negative:
+              config:
+                name: census_grid_2021_europe__populated_non_negative
+
+      - name: geom_wkt_4326
+        description: "Geometry WKT (EPSG:4326) debug column."
+        tests:
+          - not_null
+          - wkt_not_empty:
+              arguments:
+                column_name: geom_wkt_4326
+              config:
+                name: census_grid_2021_europe__geom_wkt_not_empty
+          - wkt_prefix_in:
+              arguments:
+                column_name: geom_wkt_4326
+                prefixes: ['POLYGON(', 'MULTIPOLYGON(']
+              config:
+                name: census_grid_2021_europe__geom_wkt_polygonal_prefix
+
+      - name: geom_wkb
+        description: "Geometry WKB (binary)."
+
+      - name: geom
+        description: "Databricks geometry object (derived from WKT)."
+
+      - name: source_file
+        description: "Source file path for lineage."
+        tests: [not_null]
+
+      - name: load_ts
+        description: "Load timestamp."
+        tests: [not_null]

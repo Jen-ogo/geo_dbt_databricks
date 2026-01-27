@@ -1,0 +1,157 @@
+version: 2
+
+models:
+  - name: road_segments
+    description: >
+      Canonical road segments (OSM ways) from BRONZE.OSM_ROADS.
+      Filters out non-drivable highway classes and restricted/private access.
+      Normalizes key attributes (oneway, lanes, maxspeed, bridge/tunnel/layer) and stores geometry as:
+        - geom (GEOMETRY, EPSG:4326)
+        - geom_wkt_4326 (STRING debug)
+      Deduplicated by (region_code, region, osm_id) keeping latest (dt, load_ts, source_file).
+
+    tests:
+      - rowcount_gt_0:
+          config:
+            name: road_segments__rowcount_gt_0
+
+      - unique_combination_of_columns:
+          columns: [region_code, region, osm_id]
+          config:
+            name: road_segments__uk_region_region_osm_id
+
+    columns:
+      - name: feature_id
+        description: "Stable feature key for OSM ways: 'W<osm_id>'."
+        tests: [not_null]
+
+      - name: osm_id
+        description: "OSM way id."
+        tests: [not_null]
+
+      - name: name
+        description: "OSM name tag (nullable)."
+
+      - name: highway
+        description: "OSM highway class (non-null after filtering)."
+        tests: [not_null]
+
+      - name: ref
+        description: "Road reference (tags:ref). Nullable."
+
+      - name: access_raw
+        description: "Raw access derived from motorcar/motor_vehicle/vehicle/access. Nullable."
+
+      - name: service
+        description: "Service subtype for service roads. Nullable."
+
+      - name: oneway_raw
+        description: "Raw oneway tag normalized to lowercase (default 'no')."
+        tests: [not_null]
+
+      - name: oneway
+        description: "Boolean oneway flag (default false when unknown)."
+        tests:
+          - values_in_or_null:
+              arguments:
+                column_name: oneway
+                values: [true, false]
+              config:
+                name: road_segments__oneway_boolean
+
+      - name: lanes
+        description: "Parsed integer lanes count (nullable)."
+        tests:
+          - non_negative:
+              arguments:
+                column_name: lanes
+              config:
+                name: road_segments__lanes_non_negative
+
+      - name: surface
+        description: "Surface tag. Nullable."
+
+      - name: lit
+        description: "Boolean lit flag (default false)."
+        tests:
+          - values_in_or_null:
+              arguments:
+                column_name: lit
+                values: [true, false]
+              config:
+                name: road_segments__lit_boolean
+
+      - name: bridge
+        description: "Boolean bridge flag (default false)."
+        tests:
+          - values_in_or_null:
+              arguments:
+                column_name: bridge
+                values: [true, false]
+              config:
+                name: road_segments__bridge_boolean
+
+      - name: tunnel
+        description: "Boolean tunnel flag (default false)."
+        tests:
+          - values_in_or_null:
+              arguments:
+                column_name: tunnel
+                values: [true, false]
+              config:
+                name: road_segments__tunnel_boolean
+
+      - name: layer
+        description: "Parsed numeric layer (nullable when unparseable)."
+
+      - name: maxspeed_raw
+        description: "Raw maxspeed tag string. Nullable."
+
+      - name: maxspeed_kph
+        description: "Parsed maxspeed normalized to km/h (mph converted when detected). Nullable."
+        tests:
+          - non_negative:
+              arguments:
+                column_name: maxspeed_kph
+              config:
+                name: road_segments__maxspeed_kph_non_negative
+
+      - name: geom
+        description: "Geometry (LINESTRING/MULTILINESTRING) as GEOMETRY, SRID=4326."
+        tests: [not_null]
+
+      - name: geom_wkt_4326
+        description: "WKT debug column derived from geom."
+        tests:
+          - not_null
+          - wkt_not_empty:
+              arguments:
+                column_name: geom_wkt_4326
+              config:
+                name: road_segments__geom_wkt_not_empty
+          - wkt_prefix_any:
+              arguments:
+                column_name: geom_wkt_4326
+                prefixes: ['LINESTRING(', 'MULTILINESTRING(']
+              config:
+                name: road_segments__geom_wkt_prefix_line
+
+      - name: region_code
+        description: "Canonical region/country code from ingest (bronze.country)."
+        tests: [not_null]
+
+      - name: region
+        description: "Region label from ingest partitioning."
+        tests: [not_null]
+
+      - name: dt
+        description: "Snapshot date (ingest partition)."
+        tests: [not_null]
+
+      - name: source_file
+        description: "Source file for lineage/debug."
+        tests: [not_null]
+
+      - name: load_ts
+        description: "Load timestamp used for dedup ordering."
+        tests: [not_null]

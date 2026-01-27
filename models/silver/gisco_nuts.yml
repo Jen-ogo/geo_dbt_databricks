@@ -1,0 +1,79 @@
+version: 2
+
+models:
+  - name: gisco_nuts
+    description: >
+      GISCO NUTS boundaries (SILVER) for Databricks.
+      Deduplicated by (level, cntr_code, nuts_id, year, scale, crs) keeping latest (load_ts desc, source_file desc).
+      Canonical geometry stored as:
+        - geom (GEOMETRY)
+        - geom_wkb (BINARY)
+        - geom_wkt_4326 (STRING debug)
+
+    tests:
+      - rowcount_gt_0:
+          config:
+            name: gisco_nuts__rowcount_gt_0
+
+    columns:
+      - name: feature_id
+        description: "Stable key: NUTS:<year>:<scale>:<crs>:<level>:<nuts_id>."
+        tests: [not_null, unique]
+
+      - name: nuts_id
+        description: "NUTS identifier (e.g., PL21, DE60)."
+        tests: [not_null]
+
+      - name: cntr_code
+        description: "Country code (e.g., PL, DE)."
+        tests: [not_null]
+
+      - name: level
+        description: "NUTS level as integer (expected 0..3)."
+        tests:
+          - values_in_or_null:
+              column_name: level
+              values: [0, 1, 2, 3]
+              config:
+                name: gisco_nuts__level_in_0_1_2_3
+
+      - name: year
+        tests: [not_null]
+      - name: scale
+        tests: [not_null]
+      - name: crs
+        tests: [not_null]
+
+      - name: geom_wkt_4326
+        description: "Normalized WKT (EPSG:4326) from geom."
+        tests:
+          - not_null
+          - wkt_not_empty:
+              column_name: geom_wkt_4326
+              config:
+                name: gisco_nuts__geom_wkt_not_empty
+          - wkt_prefix_in:
+              column_name: geom_wkt_4326
+              prefixes: ['POLYGON(', 'MULTIPOLYGON(']
+              config:
+                name: gisco_nuts__geom_wkt_polygonal_prefix
+
+      - name: geom
+        description: "Databricks GEOMETRY."
+        tests:
+          - not_null
+          # reuse existing test name even though it's GEOMETRY: it calls st_aswkt(...)
+          - geog_is_polygonal:
+              column_name: geom
+              config:
+                name: gisco_nuts__geom_is_polygonal
+
+      - name: geom_wkb
+        description: "WKB bytes for storage/interop."
+        tests: [not_null]
+
+      - name: source_file
+        tests: [not_null]
+
+      - name: load_ts
+        tests: [not_null]

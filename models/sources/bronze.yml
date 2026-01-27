@@ -1,0 +1,19 @@
+version: 2
+
+sources:
+  - name: bronze
+    database: geo_databricks_sub   # UC catalog
+    schema: bronze                 # UC schema
+    tables:
+      - name: eurostat_tran_r_elvehst
+      - name: gisco_nuts
+      - name: eurostat_lau_degurba
+      - name: osm_admin
+      - name: osm_charging
+      - name: osm_poi_points
+      - name: osm_poi_polygons
+      - name: osm_pt_points
+      - name: osm_pt_lines
+      - name: osm_roads
+      - name: osm_buildings_activity
+      - name: census_grid_2021_europe
