@@ -6,21 +6,20 @@
 
 with src as (
   select
-    cast(osm_id as string)        as osm_id,
-    cast(nullif(name,'') as string) as name,
-    cast(nullif(ref,'')  as string) as ref,
-    cast(other_tags as string)    as other_tags_raw,
+    cast(osm_id as string)            as osm_id,
+    cast(nullif(name,'') as string)   as name,
+    cast(nullif(ref,'')  as string)   as ref,
+    cast(other_tags as string)        as other_tags_raw,
+    cast(geom_wkb as binary)          as geom_wkb,
 
-    cast(geom_wkb as binary)      as geom_wkb,
+    cast(country as string)           as country,
+    cast(region  as string)           as region,
 
-    cast(country as string)       as country,
-    cast(region  as string)       as region,
+    cast(dt as date)                  as dt,
+    cast(source_file as string)       as source_file,
+    cast(load_ts as timestamp)        as load_ts,
 
-    cast(dt as date)              as dt,
-    cast(source_file as string)   as source_file,
-    cast(load_ts as timestamp)    as load_ts,
-
-    {{ osm_tags_json('other_tags') }} as tags
+    {{ osm_tags_json('cast(other_tags as string)') }} as tags
   from {{ source('bronze','osm_charging') }}
   where osm_id is not null
     and geom_wkb is not null
@@ -34,11 +33,9 @@ base as (
     name,
     ref,
 
-    -- канон: region_code вместо country
     lower(country) as region_code,
     region,
 
-    -- tags (map<string,string>) -> колонки
     element_at(tags,'name:en')   as name_en,
     element_at(tags,'amenity')   as amenity,
     element_at(tags,'operator')  as operator,
@@ -57,7 +54,6 @@ base as (
     element_at(tags,'ref:EU:EVSE')      as ref_eu_evse,
     element_at(tags,'ref:EU:EVSE:pool') as ref_eu_evse_pool,
 
-    -- geo: канонизируем как GEOMETRY + debug WKT
     st_setsrid(st_geomfromwkb(geom_wkb), 4326) as geom,
     st_astext(st_setsrid(st_geomfromwkb(geom_wkb), 4326)) as geom_wkt_4326,
 
@@ -68,8 +64,6 @@ base as (
     source_file,
     load_ts
   from src
-  -- опционально: если хочешь только charging_station, как в Snowflake:
-  -- where lower(element_at(tags,'amenity')) = 'charging_station'
 ),
 
 final as (
@@ -88,5 +82,6 @@ final as (
   ) = 1
 )
 
-select * from final
+select *
+from final
 where geom is not null

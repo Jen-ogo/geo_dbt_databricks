@@ -16,7 +16,8 @@ models:
             name: road_segments__rowcount_gt_0
 
       - unique_combination_of_columns:
-          columns: [region_code, region, osm_id]
+          arguments:
+            columns: [region_code, region, osm_id]
           config:
             name: road_segments__uk_region_region_osm_id
 

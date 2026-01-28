@@ -1,0 +1,108 @@
+version: 2
+
+models:
+  - name: poi_points
+    description: >
+      Canonical POI points (OSM nodes) from BRONZE.OSM_POI_POINTS.
+      other_tags -> tags(map<string,string>), typed into poi_class/poi_type,
+      deduplicated by (region_code, region, osm_id) keeping latest (dt, load_ts, source_file).
+      Geometry: geom (EPSG:4326) + geom_wkt_4326 (debug).
+
+    tests:
+      - rowcount_gt_0:
+          config:
+            name: poi_points__rowcount_gt_0
+
+      - unique_combination_of_columns:
+          arguments:
+            columns: [region_code, region, osm_id]
+          config:
+            name: poi_points__uk_region_region_osm_id
+
+    columns:
+      - name: feature_id
+        description: "Stable feature key for POI nodes: 'N' + osm_id."
+        tests: [not_null]
+
+      - name: osm_id
+        description: "OSM node id."
+        tests: [not_null]
+
+      - name: name
+        description: "OSM name tag (nullable)."
+
+      - name: region_code
+        description: "Canonical region/country code (lower(country))."
+        tests: [not_null]
+
+      - name: region
+        description: "Region label from ingest partitioning."
+        tests: [not_null]
+
+      - name: addr_housenumber
+        description: "Address house number from tags (addr:housenumber). Nullable."
+      - name: addr_street
+        description: "Address street from tags (addr:street). Nullable."
+      - name: addr_postcode
+        description: "Address postcode from tags (addr:postcode). Nullable."
+      - name: addr_city_or_place
+        description: "Address city or place from tags (addr:city / addr:place). Nullable."
+
+      - name: poi_class
+        description: "High-level POI category inferred from which tag family is present."
+        tests:
+          - not_null
+          - values_in_or_null:
+              arguments:
+                column_name: poi_class
+                values: ["amenity","shop","tourism","leisure","office","craft","man_made","emergency","public_transport","railway","highway","place"]
+              config:
+                name: poi_points__poi_class_allowlist
+
+      - name: poi_type
+        description: "Specific POI type value taken from tags (e.g., amenity=restaurant)."
+        tests:
+          - not_null
+          - wkt_not_empty:
+              arguments:
+                column_name: poi_type
+              config:
+                name: poi_points__poi_type_not_empty
+
+      - name: geom
+        description: "Databricks GEOMETRY point, SRID=4326."
+        tests: [not_null]
+
+      - name: geom_wkt_4326
+        description: "WKT representation of geom (debug/inspection)."
+        tests:
+          - not_null
+          - wkt_not_empty:
+              arguments:
+                column_name: geom_wkt_4326
+              config:
+                name: poi_points__geom_wkt_not_empty
+          - wkt_prefix_any:
+              arguments:
+                column_name: geom_wkt_4326
+                prefixes: ["POINT("]
+              config:
+                name: poi_points__geom_wkt_prefix_point
+
+      - name: tags
+        description: "Parsed tags map from other_tags (map<string,string>). Nullable."
+
+      - name: other_tags_raw
+        description: "Raw other_tags string. Nullable."
+
+      - name: dt
+        description: "Snapshot date (ingest partition)."
+        tests: [not_null]
+
+      - name: source_file
+        description: "Source file path for lineage/debug."
+        tests: [not_null]
+
+      - name: load_ts
+        description: "Load timestamp used for dedup ordering."
+        tests: [not_null]

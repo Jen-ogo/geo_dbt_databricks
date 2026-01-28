@@ -1,0 +1,118 @@
+version: 2
+
+models:
+  - name: poi_areas
+    description: >
+      Canonical POI polygons (OSM areas) from BRONZE.OSM_POI_POLYGONS.
+      other_tags -> tags(map<string,string>), typed into poi_class/poi_type,
+      deduplicated by (region_code, region, feature_id) keeping latest (dt, load_ts, source_file).
+      Geometry: geom (EPSG:4326) + geom_wkt_4326 (debug). Adds centroid_geom and area_m2.
+
+    tests:
+      - rowcount_gt_0:
+          config:
+            name: poi_areas__rowcount_gt_0
+
+      - unique_combination_of_columns:
+          arguments:
+            columns: [region_code, region, feature_id]
+          config:
+            name: poi_areas__uk_region_region_feature_id
+
+      - osm_id_or_way_id_present:
+          config:
+            name: poi_areas__osm_id_or_way_id_present
+
+    columns:
+      - name: feature_id
+        description: "Stable feature key. Prefer osm_id if present else 'W' + osm_way_id."
+        tests: [not_null]
+
+      - name: osm_id
+        description: "OSM id (nullable if derived from way id)."
+
+      - name: osm_way_id
+        description: "OSM way id (nullable if osm_id present)."
+
+      - name: name
+        description: "OSM name tag (nullable)."
+
+      - name: region_code
+        description: "Canonical region/country code (lower(country))."
+        tests: [not_null]
+
+      - name: region
+        description: "Region label from ingest partitioning."
+        tests: [not_null]
+
+      - name: poi_class
+        description: "High-level POI category inferred from which tag family is present."
+        tests:
+          - not_null
+          - values_in_or_null:
+              arguments:
+                column_name: poi_class
+                values: ["amenity","shop","tourism","office","leisure","sport","building","landuse"]
+              config:
+                name: poi_areas__poi_class_allowlist
+
+      - name: poi_type
+        description: "Specific POI type value (e.g., amenity=restaurant)."
+        tests:
+          - not_null
+          - wkt_not_empty:
+              arguments:
+                column_name: poi_type
+              config:
+                name: poi_areas__poi_type_not_empty
+
+      - name: geom
+        description: "Databricks GEOMETRY polygon, SRID=4326."
+        tests: [not_null]
+
+      - name: geom_wkt_4326
+        description: "WKT representation of geom (debug/inspection)."
+        tests:
+          - not_null
+          - wkt_not_empty:
+              arguments:
+                column_name: geom_wkt_4326
+              config:
+                name: poi_areas__geom_wkt_not_empty
+          - wkt_prefix_any:
+              arguments:
+                column_name: geom_wkt_4326
+                prefixes: ["POLYGON(", "MULTIPOLYGON("]
+              config:
+                name: poi_areas__geom_wkt_prefix_polygonal
+
+      - name: centroid_geom
+        description: "Centroid geometry (SRID=4326) derived from geom. Useful for joins."
+        tests: [not_null]
+
+      - name: area_m2
+        description: "Area in square meters computed in EPSG:3035."
+        tests:
+          - non_negative:
+              arguments:
+                column_name: area_m2
+              config:
+                name: poi_areas__area_m2_non_negative
+
+      - name: tags
+        description: "Parsed tags map from other_tags (map<string,string>). Nullable."
+
+      - name: other_tags_raw
+        description: "Raw other_tags string. Nullable."
+
+      - name: dt
+        description: "Snapshot date (ingest partition)."
+        tests: [not_null]
+
+      - name: source_file
+        description: "Source file path for lineage/debug."
+        tests: [not_null]
+
+      - name: load_ts
+        description: "Load timestamp used for dedup ordering."
+        tests: [not_null]
