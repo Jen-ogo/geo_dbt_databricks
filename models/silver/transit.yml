@@ -1,0 +1,184 @@
+version: 2
+
+models:
+  - name: transit_points
+    description: >
+      Public transport / related points derived from BRONZE.OSM_PT_POINTS (Databricks).
+      Classifies each feature into poi_class (transport/amenity/emergency),
+      parses geometry from WKB into GEOMETRY (EPSG:4326) and keeps geom_wkt_4326 as debug.
+      Deduplicated by (region_code, region, osm_id) keeping latest by dt/load_ts/source_file.
+
+    tests:
+      - rowcount_gt_0:
+          config:
+            name: transit_points__rowcount_gt_0
+
+      - unique_combination_of_columns:
+          columns: [region_code, region, osm_id]
+          config:
+            name: transit_points__uk_region_region_osm_id
+
+    columns:
+      - name: feature_id
+        description: "Stable feature key for nodes: 'N<osm_id>'."
+        tests:
+          - not_null
+          - unique
+
+      - name: osm_id
+        description: "OSM node id."
+        tests: [not_null]
+
+      - name: name
+        description: "OSM name (nullable)."
+
+      - name: poi_class
+        description: "High-level class: transport | amenity | emergency."
+        tests:
+          - not_null
+          - values_in_or_null:
+              arguments:
+                column_name: poi_class
+                values: ["transport", "amenity", "emergency"]
+              config:
+                name: transit_points__poi_class_allowed
+
+      - name: poi_type
+        description: "Specific type within the class (public_transport/railway/highway/amenity/emergency)."
+        tests:
+          - not_null
+          - wkt_not_empty:
+              arguments:
+                column_name: poi_type
+              config:
+                name: transit_points__poi_type_not_empty
+
+      - name: geom
+        description: "Databricks GEOMETRY (EPSG:4326)."
+        tests: [not_null]
+
+      - name: geom_wkt_4326
+        description: "Debug WKT derived from geom. Expected to be POINT."
+        tests:
+          - not_null
+          - wkt_not_empty:
+              arguments:
+                column_name: geom_wkt_4326
+              config:
+                name: transit_points__geom_wkt_not_empty
+          - wkt_prefix_any:
+              arguments:
+                column_name: geom_wkt_4326
+                prefixes: ["POINT"]
+              config:
+                name: transit_points__geom_wkt_prefix_point
+
+      - name: region_code
+        description: "Canonical region/country code from ingestion (lower(country))."
+        tests: [not_null]
+
+      - name: region
+        description: "Region label from ingest partitioning."
+        tests: [not_null]
+
+      - name: dt
+        description: "Snapshot date (ingest partition)."
+        tests: [not_null]
+
+      - name: source_file
+        description: "Source file path for lineage/debug."
+        tests: [not_null]
+
+      - name: load_ts
+        description: "Ingestion/load timestamp used for dedup ordering."
+        tests: [not_null]
+
+
+  - name: transit_lines
+    description: >
+      Public transport / infrastructure lines derived from BRONZE.OSM_PT_LINES (Databricks).
+      Classifies each feature into line_class (railway|waterway|aerialway) based on native cols or tags,
+      parses geometry from WKB into GEOMETRY (EPSG:4326) and keeps geom_wkt_4326 as debug.
+      Deduplicated by (region_code, region, osm_id) keeping latest by dt/load_ts/source_file.
+
+    tests:
+      - rowcount_gt_0:
+          config:
+            name: transit_lines__rowcount_gt_0
+
+      - unique_combination_of_columns:
+          columns: [region_code, region, osm_id]
+          config:
+            name: transit_lines__uk_region_region_osm_id
+
+    columns:
+      - name: feature_id
+        description: "Stable feature key for ways: 'W<osm_id>'."
+        tests:
+          - not_null
+          - unique
+
+      - name: osm_id
+        description: "OSM way id."
+        tests: [not_null]
+
+      - name: line_class
+        description: "High-level class of the line: railway | waterway | aerialway."
+        tests:
+          - not_null
+          - values_in_or_null:
+              arguments:
+                column_name: line_class
+                values: ["railway", "waterway", "aerialway"]
+              config:
+                name: transit_lines__line_class_allowed
+
+      - name: line_type
+        description: "Specific type from the corresponding tag (railway/waterway/aerialway)."
+        tests:
+          - not_null
+          - wkt_not_empty:
+              arguments:
+                column_name: line_type
+              config:
+                name: transit_lines__line_type_not_empty
+
+      - name: geom
+        description: "Databricks GEOMETRY (EPSG:4326)."
+        tests: [not_null]
+
+      - name: geom_wkt_4326
+        description: "Debug WKT derived from geom. Expected to be LINESTRING/MULTILINESTRING."
+        tests:
+          - not_null
+          - wkt_not_empty:
+              arguments:
+                column_name: geom_wkt_4326
+              config:
+                name: transit_lines__geom_wkt_not_empty
+          - wkt_prefix_any:
+              arguments:
+                column_name: geom_wkt_4326
+                prefixes: ["LINESTRING(", "MULTILINESTRING("]
+              config:
+                name: transit_lines__geom_wkt_prefix_line
+
+      - name: region_code
+        description: "Canonical region/country code from ingestion (lower(country))."
+        tests: [not_null]
+
+      - name: region
+        description: "Region label from ingest partitioning."
+        tests: [not_null]
+
+      - name: dt
+        description: "Snapshot date (ingest partition)."
+        tests: [not_null]
+
+      - name: source_file
+        description: "Source file path for lineage/debug."
+        tests: [not_null]
+
+      - name: load_ts
+        description: "Ingestion/load timestamp used for dedup ordering."
+        tests: [not_null]

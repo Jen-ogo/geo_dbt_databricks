@@ -1,8 +1,7 @@
-{% macro h3_r10_from_geog_point(geog_point_col) -%}
-
-  h3_point_to_cell_string({{ geog_point_col }}, 10)
+{% macro h3_r10_from_geog_point(point_geom_expr) -%}
+  h3_pointash3string(st_aswkb({{ point_geom_expr }}), 10)
 {%- endmacro %}
 
-{% macro h3_r10_from_geog_centroid(geog_poly_col) -%}
-  h3_point_to_cell_string(ST_Centroid({{ geog_poly_col }}), 10)
+{% macro h3_r10_from_geog_centroid(poly_geom_expr) -%}
+  h3_pointash3string(st_aswkb(st_centroid({{ poly_geom_expr }})), 10)
 {%- endmacro %}
