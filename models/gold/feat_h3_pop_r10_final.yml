@@ -1,0 +1,153 @@
+version: 2
+
+models:
+  - name: feat_h3_pop_r10_final
+    description: >
+      GOLD population features on H3 R10.
+      Built from SILVER.FEAT_H3_POP_R10 without re-running Silver logic.
+      Adds geometry WKT from H3 and area in m² (EPSG:3035),
+      plus two density interpretations: by census support (grid) and by hex area.
+
+      Grain: (region_code, h3_r10).
+
+    tests:
+      - rowcount_gt_0:
+          config:
+            name: feat_h3_pop_r10_final__rowcount_gt_0
+
+      # На всякий: в GOLD хотим 1 строку на (region_code, h3_r10)
+      - dbt_utils.unique_combination_of_columns:
+          combination_of_columns: [region_code, h3_r10]
+          config:
+            name: feat_h3_pop_r10_final__uk_region_h3
+
+    columns:
+      - name: region_code
+        description: "Country/region code used in project (e.g., poland, germany)."
+        tests: [not_null]
+
+      - name: h3_r10
+        description: "H3 index (resolution 10) as canonical hex string."
+        tests:
+          - not_null
+          - is_h3_hex:
+              arguments:
+                column_name: h3_r10
+              config:
+                name: feat_h3_pop_r10_final__h3_r10_is_h3_hex
+
+      - name: cell_wkt_4326
+        description: "H3 cell boundary WKT in EPSG:4326 (debug)."
+        tests:
+          - not_null
+          - wkt_not_empty:
+              arguments:
+                column_name: cell_wkt_4326
+              config:
+                name: feat_h3_pop_r10_final__cell_wkt_not_empty
+          - wkt_prefix_any:
+              arguments:
+                column_name: cell_wkt_4326
+                prefixes: ["POLYGON", "MULTIPOLYGON"]
+              config:
+                name: feat_h3_pop_r10_final__cell_wkt_prefix_poly
+
+      - name: cell_center_wkt_4326
+        description: "H3 cell center WKT POINT in EPSG:4326 (debug)."
+        tests:
+          - not_null
+          - wkt_not_empty:
+              arguments:
+                column_name: cell_center_wkt_4326
+              config:
+                name: feat_h3_pop_r10_final__cell_center_wkt_not_empty
+          - wkt_prefix_any:
+              arguments:
+                column_name: cell_center_wkt_4326
+                prefixes: ["POINT"]
+              config:
+                name: feat_h3_pop_r10_final__cell_center_wkt_prefix_point
+
+      - name: cell_area_m2
+        description: "H3 cell area in m² (computed in EPSG:3035)."
+        tests:
+          - not_null
+          - non_negative:
+              arguments:
+                column_name: cell_area_m2
+              config:
+                name: feat_h3_pop_r10_final__cell_area_m2_non_negative
+
+      - name: grid_cells_cnt
+        description: "Number of contributing 1km census grid cells."
+        tests:
+          - not_null
+          - non_negative:
+              arguments:
+                column_name: grid_cells_cnt
+              config:
+                name: feat_h3_pop_r10_final__grid_cells_cnt_non_negative
+
+      - name: pop_total
+        description: "Total population."
+        tests:
+          - non_negative:
+              arguments:
+                column_name: pop_total
+              config:
+                name: feat_h3_pop_r10_final__pop_total_non_negative
+
+      - name: emp_total
+        description: "Total employed."
+        tests:
+          - non_negative:
+              arguments:
+                column_name: emp_total
+              config:
+                name: feat_h3_pop_r10_final__emp_total_non_negative
+
+      - name: share_age_ge65
+        description: "pop_age_ge65 / pop_total."
+        tests:
+          - num_between_or_null:
+              arguments:
+                column_name: share_age_ge65
+                min_value: 0
+                max_value: 1
+              config:
+                name: feat_h3_pop_r10_final__share_age_ge65_0_1_warn
+                severity: warn
+
+      - name: share_age_lt15
+        description: "pop_age_lt15 / pop_total."
+        tests:
+          - num_between_or_null:
+              arguments:
+                column_name: share_age_lt15
+                min_value: 0
+                max_value: 1
+              config:
+                name: feat_h3_pop_r10_final__share_age_lt15_0_1_warn
+                severity: warn
+
+      - name: share_emp
+        description: "emp_total / pop_total. Can exceed 1 due to source anomalies; monitored as WARN."
+        tests:
+          - num_between_or_null:
+              arguments:
+                column_name: share_emp
+                min_value: 0
+                max_value: 1
+              config:
+                name: feat_h3_pop_r10_final__share_emp_0_1_warn
+                severity: warn
+
+      - name: pop_method
+        description: "Method label for population aggregation."
+        tests:
+          - values_in_or_null:
+              arguments:
+                column_name: pop_method
+                values: ["census_grid_1km_to_h3"]
+              config:
+                name: feat_h3_pop_r10_final__pop_method_allowed

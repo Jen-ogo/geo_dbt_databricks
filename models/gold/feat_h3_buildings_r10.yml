@@ -1,0 +1,228 @@
+version: 2
+
+models:
+  - name: feat_h3_buildings_r10
+    description: >
+      GOLD feature mart: buildings aggregated to H3 resolution 10.
+      Source: SILVER.BUILDING_FOOTPRINTS_MODEL (buildings) + SILVER.DIM_H3_R10_CELLS (cell geometry/area).
+      IMPORTANT:
+      - H3 R10 is reused from SILVER (no H3 recompute in GOLD).
+      - cell_wkt_4326 / cell_center_wkt_4326 / cell_area_m2 are reused from SILVER dim_h3_r10_cells.
+      Grain: (region_code, region, h3_r10) — one row per H3 cell.
+
+    tests:
+      - rowcount_gt_0:
+          config:
+            name: gold__feat_h3_buildings_r10__rowcount_gt_0
+
+      - dbt_utils.unique_combination_of_columns:
+          combination_of_columns: [region_code, region, h3_r10]
+          config:
+            name: gold__feat_h3_buildings_r10__uk_region_region_h3
+
+    columns:
+      - name: region_code
+        description: "Region/country code (e.g. poland, germany)."
+        tests:
+          - not_null
+
+      - name: region
+        description: "Region/voivodeship/state name."
+        tests:
+          - not_null
+
+      - name: h3_r10
+        description: "H3 index at resolution 10 (string hex)."
+        tests:
+          - not_null
+          - is_h3_hex:
+              arguments:
+                column_name: h3_r10
+              config:
+                name: gold__feat_h3_buildings_r10__h3_r10_is_h3_hex
+
+      - name: cell_area_m2
+        description: "H3 cell area (m²), reused from silver.dim_h3_r10_cells."
+        tests:
+          - not_null
+          - non_negative:
+              arguments:
+                column_name: cell_area_m2
+              config:
+                name: gold__feat_h3_buildings_r10__cell_area_m2_non_negative
+
+      - name: cell_wkt_4326
+        description: "H3 cell boundary WKT (debug)."
+        tests:
+          - not_null
+          - wkt_not_empty:
+              arguments:
+                column_name: cell_wkt_4326
+              config:
+                name: gold__feat_h3_buildings_r10__cell_wkt_not_empty
+          - wkt_prefix_any:
+              arguments:
+                column_name: cell_wkt_4326
+                prefixes: ["POLYGON", "MULTIPOLYGON"]
+              config:
+                name: gold__feat_h3_buildings_r10__cell_wkt_prefix_poly
+
+      - name: cell_center_wkt_4326
+        description: "H3 cell center point WKT (debug)."
+        tests:
+          - not_null
+          - wkt_not_empty:
+              arguments:
+                column_name: cell_center_wkt_4326
+              config:
+                name: gold__feat_h3_buildings_r10__cell_center_wkt_not_empty
+          - wkt_prefix_any:
+              arguments:
+                column_name: cell_center_wkt_4326
+                prefixes: ["POINT"]
+              config:
+                name: gold__feat_h3_buildings_r10__cell_center_wkt_prefix_point
+
+      - name: buildings_cnt
+        description: "Total buildings count in the H3 cell."
+        tests:
+          - not_null
+          - non_negative:
+              arguments:
+                column_name: buildings_cnt
+              config:
+                name: gold__feat_h3_buildings_r10__buildings_cnt_non_negative
+
+      - name: res_buildings_cnt
+        description: "Residential buildings count (mapped from building_type)."
+        tests:
+          - non_negative:
+              arguments:
+                column_name: res_buildings_cnt
+              config:
+                name: gold__feat_h3_buildings_r10__res_buildings_cnt_non_negative
+
+      - name: nonres_buildings_cnt
+        description: "Non-residential buildings count (mapped from building_type)."
+        tests:
+          - non_negative:
+              arguments:
+                column_name: nonres_buildings_cnt
+              config:
+                name: gold__feat_h3_buildings_r10__nonres_buildings_cnt_non_negative
+
+      - name: unknown_buildings_cnt
+        description: "Buildings where building_type='yes' treated as unknown."
+        tests:
+          - non_negative:
+              arguments:
+                column_name: unknown_buildings_cnt
+              config:
+                name: gold__feat_h3_buildings_r10__unknown_buildings_cnt_non_negative
+
+      - name: footprint_area_m2_sum
+        description: "Sum of building footprint areas (m²) in the cell (EPSG:3035)."
+        tests:
+          - non_negative:
+              arguments:
+                column_name: footprint_area_m2_sum
+              config:
+                name: gold__feat_h3_buildings_r10__footprint_area_m2_sum_non_negative
+
+      - name: floor_area_m2_est_sum
+        description: "Estimated floor area sum = footprint_area_m2_sum * building_levels (levels default 1)."
+        tests:
+          - non_negative:
+              arguments:
+                column_name: floor_area_m2_est_sum
+              config:
+                name: gold__feat_h3_buildings_r10__floor_area_m2_est_sum_non_negative
+
+      - name: levels_avg
+        description: "Average building levels in the cell."
+        tests:
+          - non_negative:
+              arguments:
+                column_name: levels_avg
+              config:
+                name: gold__feat_h3_buildings_r10__levels_avg_non_negative
+
+      - name: levels_p50
+        description: "Median (p50) building levels in the cell (approx)."
+        tests:
+          - non_negative:
+              arguments:
+                column_name: levels_p50
+              config:
+                name: gold__feat_h3_buildings_r10__levels_p50_non_negative
+
+      - name: footprint_area_p50_m2
+        description: "Median (p50) footprint area in the cell (approx, m²)."
+        tests:
+          - non_negative:
+              arguments:
+                column_name: footprint_area_p50_m2
+              config:
+                name: gold__feat_h3_buildings_r10__footprint_area_p50_non_negative
+
+      - name: footprint_area_p90_m2
+        description: "90th percentile footprint area in the cell (approx, m²)."
+        tests:
+          - non_negative:
+              arguments:
+                column_name: footprint_area_p90_m2
+              config:
+                name: gold__feat_h3_buildings_r10__footprint_area_p90_non_negative
+
+      - name: buildings_per_km2
+        description: "Buildings density per km²."
+        tests:
+          - non_negative:
+              arguments:
+                column_name: buildings_per_km2
+              config:
+                name: gold__feat_h3_buildings_r10__buildings_per_km2_non_negative
+
+      - name: footprint_m2_per_km2
+        description: "Footprint area density per km²."
+        tests:
+          - non_negative:
+              arguments:
+                column_name: footprint_m2_per_km2
+              config:
+                name: gold__feat_h3_buildings_r10__footprint_m2_per_km2_non_negative
+
+      - name: floor_area_m2_per_km2
+        description: "Estimated floor area density per km²."
+        tests:
+          - non_negative:
+              arguments:
+                column_name: floor_area_m2_per_km2
+              config:
+                name: gold__feat_h3_buildings_r10__floor_area_m2_per_km2_non_negative
+
+      - name: built_up_share
+        description: >
+          Share of cell covered by building footprints: footprint_area_m2_sum / cell_area_m2.
+          Ideal range 0..1. May exceed 1 due to overlaps/invalid geometry — we monitor as WARN by default.
+        tests:
+          - non_negative:
+              arguments:
+                column_name: built_up_share
+              config:
+                name: gold__feat_h3_buildings_r10__built_up_share_non_negative
+
+          # WARN sanity
+          - num_between_or_null:
+              arguments:
+                column_name: built_up_share
+                min_value: 0
+                max_value: 1
+              config:
+                name: gold__feat_h3_buildings_r10__built_up_share_0_1_warn
+                severity: warn
+
+      - name: last_load_ts
+        description: "Max load_ts across contributing footprints."
+        tests:
+          - not_null

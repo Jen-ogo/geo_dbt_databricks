@@ -1,0 +1,111 @@
+version: 2
+
+models:
+  - name: feat_h3_charging_r10
+    description: >
+      GOLD charging features on H3 R10.
+      Built by joining GOLD.FEAT_H3_POP_R10_FINAL (population + H3 cell geometry/area)
+      with SILVER.FEAT_H3_EV_CHARGERS_R10 (charger counts).
+      No H3 recalculation in GOLD; H3 is canonical STRING.
+
+      Grain: (region_code, h3_r10)
+
+    tests:
+      - rowcount_gt_0:
+          config:
+            name: feat_h3_charging_r10__rowcount_gt_0
+
+      - dbt_utils.unique_combination_of_columns:
+          combination_of_columns: [region_code, h3_r10]
+          config:
+            name: feat_h3_charging_r10__uk_region_h3
+
+    columns:
+      - name: region_code
+        tests: [not_null]
+
+      - name: h3_r10
+        tests:
+          - not_null
+          - is_h3_hex:
+              arguments:
+                column_name: h3_r10
+              config:
+                name: feat_h3_charging_r10__h3_is_h3_hex
+
+      - name: cell_wkt_4326
+        tests:
+          - not_null
+          - wkt_not_empty:
+              arguments:
+                column_name: cell_wkt_4326
+              config:
+                name: feat_h3_charging_r10__cell_wkt_not_empty
+          - wkt_prefix_any:
+              arguments:
+                column_name: cell_wkt_4326
+                prefixes: ["POLYGON", "MULTIPOLYGON"]
+              config:
+                name: feat_h3_charging_r10__cell_wkt_prefix_poly
+
+      - name: cell_center_wkt_4326
+        tests:
+          - not_null
+          - wkt_not_empty:
+              arguments:
+                column_name: cell_center_wkt_4326
+              config:
+                name: feat_h3_charging_r10__cell_center_wkt_not_empty
+          - wkt_prefix_any:
+              arguments:
+                column_name: cell_center_wkt_4326
+                prefixes: ["POINT"]
+              config:
+                name: feat_h3_charging_r10__cell_center_wkt_prefix_point
+
+      - name: cell_area_m2
+        tests:
+          - not_null
+          - non_negative:
+              arguments:
+                column_name: cell_area_m2
+              config:
+                name: feat_h3_charging_r10__cell_area_m2_non_negative
+
+      - name: chargers_cnt
+        tests:
+          - not_null
+          - non_negative:
+              arguments:
+                column_name: chargers_cnt
+              config:
+                name: feat_h3_charging_r10__chargers_cnt_non_negative
+
+      - name: pop_total
+        tests:
+          - non_negative:
+              arguments:
+                column_name: pop_total
+              config:
+                name: feat_h3_charging_r10__pop_total_non_negative
+
+      - name: chargers_per_10k_pop
+        description: "chargers_cnt * 10000 / pop_total"
+        tests:
+          - non_negative:
+              arguments:
+                column_name: chargers_per_10k_pop
+              config:
+                name: feat_h3_charging_r10__chargers_per_10k_non_negative
+
+      - name: chargers_per_km2
+        description: "chargers_cnt / (cell_area_m2 / 1e6)"
+        tests:
+          - non_negative:
+              arguments:
+                column_name: chargers_per_km2
+              config:
+                name: feat_h3_charging_r10__chargers_per_km2_non_negative
+
+      - name: last_load_ts
+        tests: [not_null]
