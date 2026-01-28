@@ -1,0 +1,65 @@
+version: 2
+
+models:
+  - name: dim_h3_r10_cells
+    description: >
+      H3 R10 dimension for all referenced cells across SILVER entities.
+      Stores boundary + center (GEOMETRY + WKT debug) and cell area in m² (EPSG:3035).
+
+    tests:
+      - rowcount_gt_0:
+          config:
+            name: dim_h3_r10_cells__rowcount_gt_0
+
+      - unique_combination_of_columns:
+          columns: [region_code, region, h3_r10]
+          config:
+            name: dim_h3_r10_cells__uk_region_region_h3
+
+    columns:
+      - name: region_code
+        tests: [not_null]
+
+      - name: region
+        tests: [not_null]
+
+      - name: h3_r10
+        tests:
+          - not_null
+          - is_h3_hex:
+              arguments:
+                column_name: h3_r10
+              config:
+                name: dim_h3_r10_cells__h3_r10_is_h3
+
+      - name: cell_wkt_4326
+        tests:
+          - not_null
+          - wkt_not_empty:
+              arguments: { column_name: cell_wkt_4326 }
+              config: { name: dim_h3_r10_cells__cell_wkt_not_empty }
+          - wkt_prefix_any:
+              arguments:
+                column_name: cell_wkt_4326
+                prefixes: ["POLYGON", "MULTIPOLYGON"]
+              config:
+                name: dim_h3_r10_cells__cell_wkt_prefix_polygonal
+
+      - name: cell_area_m2
+        tests:
+          - non_negative:
+              arguments: { column_name: cell_area_m2 }
+              config: { name: dim_h3_r10_cells__cell_area_non_negative }
+
+      - name: cell_center_wkt_4326
+        tests:
+          - not_null
+          - wkt_not_empty:
+              arguments: { column_name: cell_center_wkt_4326 }
+              config: { name: dim_h3_r10_cells__center_wkt_not_empty }
+          - wkt_prefix_any:
+              arguments:
+                column_name: cell_center_wkt_4326
+                prefixes: ["POINT"]
+              config:
+                name: dim_h3_r10_cells__center_wkt_prefix_point
