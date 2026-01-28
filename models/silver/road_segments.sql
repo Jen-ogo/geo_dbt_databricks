@@ -46,7 +46,6 @@ base as (
     {{ osm_bool('tags','bridge', default=false) }}  as bridge,
     {{ osm_bool('tags','tunnel', default=false) }}  as tunnel,
 
-    -- layer может быть "-1", "1;2", "ground" → берём первое число со знаком
     try_cast(regexp_extract(element_at(tags,'layer'), '(-?[0-9]+)', 1) as int) as layer,
 
     element_at(tags,'maxspeed')                     as maxspeed_raw,
@@ -57,7 +56,7 @@ base as (
     st_astext(st_setsrid(st_geomfromwkb(geom_wkb), 4326)) as geom_wkt_4326,
 
     -- canonical region fields
-    cast(country as string) as region_code,
+    cast(lower(country) as string) as region_code,
     cast(region  as string) as region,
 
     cast(dt as date)        as dt,

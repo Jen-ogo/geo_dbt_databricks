@@ -1,0 +1,175 @@
+version: 2
+
+models:
+  - name: building_footprints
+    description: >
+      Canonical building footprints from BRONZE.OSM_BUILDINGS_ACTIVITY (Databricks, Silver).
+      Grain: (region_code, region, feature_id) with latest record kept by (dt desc, load_ts desc, source_file desc).
+      Geometry is stored as:
+        - geom (GEOMETRY, EPSG:4326)
+        - geom_wkt_4326 (STRING debug)
+      Includes derived centroid + h3_r10 for downstream feature engineering.
+
+    tests:
+      - rowcount_gt_0:
+          config:
+            name: building_footprints__rowcount_gt_0
+
+      - unique_combination_of_columns:
+          columns: [region_code, region, feature_id]
+          config:
+            name: building_footprints__uk_region_region_feature
+
+      - osm_id_or_way_id_present:
+          config:
+            name: building_footprints__osm_id_or_way_id_present
+
+    columns:
+      - name: feature_id
+        description: "Stable id: 'N<osm_id>' or 'W<osm_way_id>'."
+        tests: [not_null]
+
+      - name: osm_id
+        description: "OSM node id (nullable if way)."
+
+      - name: osm_way_id
+        description: "OSM way id (nullable if node)."
+
+      - name: building_type
+        description: "Building type from native `building` column or tags['building'] (excluding 'no')."
+        tests: [not_null]
+
+      - name: building_levels
+        description: "Parsed integer building:levels from tags (nullable if missing/unparseable)."
+        tests:
+          - non_negative:
+              arguments:
+                column_name: building_levels
+              config:
+                name: building_footprints__building_levels_non_negative
+
+      - name: geom
+        description: "Building footprint geometry as GEOMETRY, SRID=4326."
+        tests: [not_null]
+
+      - name: geom_wkt_4326
+        description: "Debug WKT derived from geom."
+        tests:
+          - not_null
+          - wkt_not_empty:
+              arguments:
+                column_name: geom_wkt_4326
+              config:
+                name: building_footprints__geom_wkt_not_empty
+          - wkt_prefix_any:
+              arguments:
+                column_name: geom_wkt_4326
+                prefixes: ['POLYGON(', 'MULTIPOLYGON(']
+              config:
+                name: building_footprints__geom_wkt_polygonal_prefix
+
+      - name: centroid_geom
+        description: "Centroid of footprint geometry (GEOMETRY)."
+
+      - name: h3_r10
+        description: "H3 index at resolution 10 derived from centroid."
+        tests:
+          - is_h3_hex:
+              arguments:
+                column_name: h3_r10
+              config:
+                name: building_footprints__h3_r10_is_hex
+
+      - name: region_code
+        description: "Canonical region/country code (lower(country))."
+        tests: [not_null]
+
+      - name: region
+        description: "Region label from ingest partition."
+        tests: [not_null]
+
+      - name: dt
+        description: "Snapshot date (ingest partition)."
+        tests: [not_null]
+
+      - name: source_file
+        description: "Source file for lineage/debug."
+        tests: [not_null]
+
+      - name: load_ts
+        description: "Load timestamp used for dedup ordering."
+        tests: [not_null]
+
+      - name: tags
+        description: "Parsed tags map from other_tags (nullable)."
+
+      - name: other_tags_raw
+        description: "Raw other_tags string."
+
+  - name: building_footprints_model
+    description: >
+      Filtered subset of building footprints for modeling/feature engineering (Databricks, Silver).
+      Excludes non-informative building types (sheds, garages, greenhouses, etc.).
+      Inherits grain and geometry columns from building_footprints.
+
+    tests:
+      - rowcount_gt_0:
+          config:
+            name: building_footprints_model__rowcount_gt_0
+
+      - unique_combination_of_columns:
+          columns: [region_code, region, feature_id]
+          config:
+            name: building_footprints_model__uk_region_region_feature
+
+    columns:
+      - name: feature_id
+        description: "Same stable id as building_footprints: 'N<osm_id>' or 'W<osm_way_id>'."
+        tests: [not_null]
+
+      - name: building_type
+        description: "Building type after filtering out excluded categories."
+        tests: [not_null]
+
+      - name: geom
+        description: "Building footprint geometry as GEOMETRY, SRID=4326."
+        tests: [not_null]
+
+      - name: geom_wkt_4326
+        description: "Debug WKT derived from geom."
+        tests:
+          - not_null
+          - wkt_not_empty:
+              arguments:
+                column_name: geom_wkt_4326
+              config:
+                name: building_footprints_model__geom_wkt_not_empty
+
+      - name: h3_r10
+        description: "H3 index at resolution 10 derived from centroid."
+        tests:
+          - is_h3_hex:
+              arguments:
+                column_name: h3_r10
+              config:
+                name: building_footprints_model__h3_r10_is_hex
+
+      - name: region_code
+        description: "Canonical region/country code."
+        tests: [not_null]
+
+      - name: region
+        description: "Region label from ingest partition."
+        tests: [not_null]
+
+      - name: dt
+        description: "Snapshot date."
+        tests: [not_null]
+
+      - name: source_file
+        description: "Source file for lineage/debug."
+        tests: [not_null]
+
+      - name: load_ts
+        description: "Load timestamp."
+        tests: [not_null]
