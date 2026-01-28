@@ -1,0 +1,126 @@
+version: 2
+
+models:
+  - name: feat_h3_degurba_r10_final
+    description: >
+      GOLD.FEAT_H3_DEGURBA_R10_FINAL — DEGURBA attribution on H3 R10 cells.
+      Built from SILVER.FEAT_H3_DEGURBA_R10 and enriched with geometry from SILVER.DIM_H3_R10_CELLS.
+
+      Key points:
+      - Does NOT recompute H3 logic; only joins to DIM cells and picks the latest (year, last_load_ts) per cell.
+      - Preserves the full set of H3 cells via LEFT JOIN to DIM (degurba may be NULL).
+      - Canonical H3 key is STRING (h3_r10), consistent with the project.
+
+      Grain: (region_code, h3_r10)
+
+    tests:
+      - rowcount_gt_0:
+          config:
+            name: feat_h3_degurba_r10_final__rowcount_gt_0
+
+    columns:
+      - name: region_code
+        description: "Country/region code (e.g. poland, germany)."
+        tests: [not_null]
+
+      - name: h3_r10
+        description: "H3 resolution 10 index as canonical hex STRING."
+        tests:
+          - not_null
+          - is_h3_hex:
+              arguments:
+                column_name: h3_r10
+              config:
+                name: feat_h3_degurba_r10_final__h3_r10_is_h3_hex
+
+      - name: cell_area_m2
+        description: "H3 cell area in m² (from SILVER.DIM_H3_R10_CELLS)."
+        tests:
+          - not_null
+          - non_negative:
+              arguments:
+                column_name: cell_area_m2
+              config:
+                name: feat_h3_degurba_r10_final__cell_area_m2_non_negative
+
+      - name: cell_wkt_4326
+        description: "H3 cell boundary WKT (EPSG:4326) for debug."
+        tests:
+          - not_null
+          - wkt_not_empty:
+              arguments:
+                column_name: cell_wkt_4326
+              config:
+                name: feat_h3_degurba_r10_final__cell_wkt_not_empty
+          - wkt_prefix_any:
+              arguments:
+                column_name: cell_wkt_4326
+                prefixes: ["POLYGON", "MULTIPOLYGON"]
+              config:
+                name: feat_h3_degurba_r10_final__cell_wkt_prefix_polygon
+
+      - name: cell_center_wkt_4326
+        description: "H3 cell center WKT POINT (EPSG:4326) for debug."
+        tests:
+          - not_null
+          - wkt_not_empty:
+              arguments:
+                column_name: cell_center_wkt_4326
+              config:
+                name: feat_h3_degurba_r10_final__cell_center_wkt_not_empty
+          - wkt_prefix_any:
+              arguments:
+                column_name: cell_center_wkt_4326
+                prefixes: ["POINT"]
+              config:
+                name: feat_h3_degurba_r10_final__cell_center_wkt_prefix_point
+
+      - name: year
+        description: "Latest available year chosen per (region_code, h3_r10). Can be NULL if no degurba."
+      - name: lau_id
+        description: "LAU identifier associated with degurba attribution. Can be NULL."
+      - name: lau_name
+        description: "LAU name associated with degurba attribution. Can be NULL."
+
+      - name: degurba
+        description: "DEGURBA class (1=city, 2=towns/suburbs, 3=rural). NULL if no attribution."
+        tests:
+          - values_in_or_null:
+              arguments:
+                column_name: degurba
+                values: [1, 2, 3]
+              config:
+                name: feat_h3_degurba_r10_final__degurba_allowed_1_2_3_or_null
+
+      - name: degurba_1_city
+        description: "One-hot: 1 if degurba=1 else 0."
+        tests:
+          - values_in_or_null:
+              arguments:
+                column_name: degurba_1_city
+                values: [0, 1]
+              config:
+                name: feat_h3_degurba_r10_final__degurba_1_city_0_1
+
+      - name: degurba_2_towns_suburbs
+        description: "One-hot: 1 if degurba=2 else 0."
+        tests:
+          - values_in_or_null:
+              arguments:
+                column_name: degurba_2_towns_suburbs
+                values: [0, 1]
+              config:
+                name: feat_h3_degurba_r10_final__degurba_2_0_1
+
+      - name: degurba_3_rural
+        description: "One-hot: 1 if degurba=3 else 0."
+        tests:
+          - values_in_or_null:
+              arguments:
+                column_name: degurba_3_rural
+                values: [0, 1]
+              config:
+                name: feat_h3_degurba_r10_final__degurba_3_0_1
+
+      - name: last_load_ts
+        description: "Latest load timestamp from SILVER.FEAT_H3_DEGURBA_R10. Can be NULL if no attribution."
