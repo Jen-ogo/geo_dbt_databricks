@@ -1,0 +1,227 @@
+version: 2
+
+models:
+  - name: feat_h3_poi_areas_r10
+    description: >
+      GOLD POI AREAS features on H3 resolution 10 (Databricks).
+      Aggregates SILVER.POI_AREAS into H3 R10 using centroid-to-cell mapping, and left-joins to
+      SILVER.DIM_H3_R10_CELLS to keep the full grid (empty cells included).
+
+      Grain: (region_code, region, h3_r10). H3 is stored as canonical hex STRING.
+
+    tests:
+      - rowcount_gt_0:
+          config:
+            name: feat_h3_poi_areas_r10__rowcount_gt_0
+
+      - dbt_utils.unique_combination_of_columns:
+          combination_of_columns: [region_code, region, h3_r10]
+          config:
+            name: feat_h3_poi_areas_r10__uk_region_region_h3
+
+    columns:
+      - name: region_code
+        description: "Project region/country code (e.g., poland, germany)."
+        tests: [not_null]
+
+      - name: region
+        description: "Administrative region name within region_code."
+        tests: [not_null]
+
+      - name: h3_r10
+        description: "H3 index at resolution 10 as hex STRING."
+        tests:
+          - not_null
+          - is_h3_hex:
+              config:
+                name: feat_h3_poi_areas_r10__h3_r10_is_h3_hex
+
+      - name: cell_area_m2
+        description: "H3 cell area in m² (from SILVER.DIM_H3_R10_CELLS)."
+        tests:
+          - not_null
+          - non_negative:
+              arguments:
+                column_name: cell_area_m2
+              config:
+                name: feat_h3_poi_areas_r10__cell_area_m2_non_negative
+
+      - name: cell_wkt_4326
+        description: "H3 cell boundary WKT in EPSG:4326 (debug)."
+        tests:
+          - not_null
+          - wkt_not_empty:
+              arguments:
+                column_name: cell_wkt_4326
+              config:
+                name: feat_h3_poi_areas_r10__cell_wkt_not_empty
+          - wkt_prefix_any:
+              arguments:
+                column_name: cell_wkt_4326
+                prefixes: ["POLYGON", "MULTIPOLYGON"]
+              config:
+                name: feat_h3_poi_areas_r10__cell_wkt_prefix_polygonal
+
+      - name: cell_center_wkt_4326
+        description: "H3 cell center WKT POINT in EPSG:4326 (debug)."
+        tests:
+          - not_null
+          - wkt_not_empty:
+              arguments:
+                column_name: cell_center_wkt_4326
+              config:
+                name: feat_h3_poi_areas_r10__cell_center_wkt_not_empty
+          - wkt_prefix_any:
+              arguments:
+                column_name: cell_center_wkt_4326
+                prefixes: ["POINT"]
+              config:
+                name: feat_h3_poi_areas_r10__cell_center_wkt_prefix_point
+
+      - name: poi_areas_cnt
+        description: "Total number of POI polygons whose centroid falls into the cell."
+        tests:
+          - not_null
+          - non_negative:
+              arguments:
+                column_name: poi_areas_cnt
+              config:
+                name: feat_h3_poi_areas_r10__poi_areas_cnt_non_negative
+
+      - name: amenity_areas_cnt
+        description: "Count of POI polygons with poi_class = amenity."
+        tests:
+          - non_negative:
+              arguments:
+                column_name: amenity_areas_cnt
+              config:
+                name: feat_h3_poi_areas_r10__amenity_areas_cnt_non_negative
+
+      - name: shop_areas_cnt
+        description: "Count of POI polygons with poi_class = shop."
+        tests:
+          - non_negative:
+              arguments:
+                column_name: shop_areas_cnt
+              config:
+                name: feat_h3_poi_areas_r10__shop_areas_cnt_non_negative
+
+      - name: tourism_areas_cnt
+        description: "Count of POI polygons with poi_class = tourism."
+        tests:
+          - non_negative:
+              arguments:
+                column_name: tourism_areas_cnt
+              config:
+                name: feat_h3_poi_areas_r10__tourism_areas_cnt_non_negative
+
+      - name: office_areas_cnt
+        description: "Count of POI polygons with poi_class = office."
+        tests:
+          - non_negative:
+              arguments:
+                column_name: office_areas_cnt
+              config:
+                name: feat_h3_poi_areas_r10__office_areas_cnt_non_negative
+
+      - name: leisure_areas_cnt
+        description: "Count of POI polygons with poi_class = leisure."
+        tests:
+          - non_negative:
+              arguments:
+                column_name: leisure_areas_cnt
+              config:
+                name: feat_h3_poi_areas_r10__leisure_areas_cnt_non_negative
+
+      - name: sport_areas_cnt
+        description: "Count of POI polygons with poi_class = sport."
+        tests:
+          - non_negative:
+              arguments:
+                column_name: sport_areas_cnt
+              config:
+                name: feat_h3_poi_areas_r10__sport_areas_cnt_non_negative
+
+      - name: building_areas_cnt
+        description: "Count of POI polygons with poi_class = building."
+        tests:
+          - non_negative:
+              arguments:
+                column_name: building_areas_cnt
+              config:
+                name: feat_h3_poi_areas_r10__building_areas_cnt_non_negative
+
+      - name: landuse_areas_cnt
+        description: "Count of POI polygons with poi_class = landuse."
+        tests:
+          - non_negative:
+              arguments:
+                column_name: landuse_areas_cnt
+              config:
+                name: feat_h3_poi_areas_r10__landuse_areas_cnt_non_negative
+
+      - name: poi_areas_per_km2
+        description: "POI areas density per km² (poi_areas_cnt normalized by cell area)."
+        tests:
+          - non_negative:
+              arguments:
+                column_name: poi_areas_per_km2
+              config:
+                name: feat_h3_poi_areas_r10__poi_areas_per_km2_non_negative
+
+      - name: amenity_areas_per_km2
+        description: "Amenity areas density per km²."
+        tests:
+          - non_negative:
+              arguments:
+                column_name: amenity_areas_per_km2
+              config:
+                name: feat_h3_poi_areas_r10__amenity_areas_per_km2_non_negative
+
+      - name: shop_areas_per_km2
+        description: "Shop areas density per km²."
+        tests:
+          - non_negative:
+              arguments:
+                column_name: shop_areas_per_km2
+              config:
+                name: feat_h3_poi_areas_r10__shop_areas_per_km2_non_negative
+
+      - name: tourism_areas_per_km2
+        description: "Tourism areas density per km²."
+        tests:
+          - non_negative:
+              arguments:
+                column_name: tourism_areas_per_km2
+              config:
+                name: feat_h3_poi_areas_r10__tourism_areas_per_km2_non_negative
+
+      - name: office_areas_per_km2
+        description: "Office areas density per km²."
+        tests:
+          - non_negative:
+              arguments:
+                column_name: office_areas_per_km2
+              config:
+                name: feat_h3_poi_areas_r10__office_areas_per_km2_non_negative
+
+      - name: leisure_areas_per_km2
+        description: "Leisure areas density per km²."
+        tests:
+          - non_negative:
+              arguments:
+                column_name: leisure_areas_per_km2
+              config:
+                name: feat_h3_poi_areas_r10__leisure_areas_per_km2_non_negative
+
+      - name: sport_areas_per_km2
+        description: "Sport areas density per km²."
+        tests:
+          - non_negative:
+              arguments:
+                column_name: sport_areas_per_km2
+              config:
+                name: feat_h3_poi_areas_r10__sport_areas_per_km2_non_negative
+
+      - name: last_load_ts
+        description: "Latest load timestamp among contributing POI polygons (NULL for empty cells)."
