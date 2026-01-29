@@ -1,0 +1,89 @@
+version: 2
+
+models:
+  - name: feat_h3_transit_point_lines_r10
+    description: >
+      GOLD feature mart on H3 R10 grid that combines public-transit points and transit lines into a single
+      dense (DIM-driven) table. Produces per-cell counts and total line length (meters), plus per-km² densities.
+      Uses canonical cell geometry debug columns from SILVER.DIM_H3_R10_CELLS.
+
+      Grain: (region_code, region, h3_r10) — exactly one row per H3 cell per region.
+
+    tests:
+      - rowcount_gt_0:
+          config: {name: feat_h3_transit_point_lines_r10__rowcount_gt_0}
+      - dbt_utils.unique_combination_of_columns:
+          combination_of_columns: [region_code, region, h3_r10]
+          config: {name: feat_h3_transit_point_lines_r10__uk_region_region_h3}
+
+    columns:
+      - name: region_code
+        tests: [not_null]
+      - name: region
+        tests: [not_null]
+      - name: h3_r10
+        tests:
+          - not_null
+          - is_h3_hex:
+              column_name: h3_r10
+              config: {name: feat_h3_transit_point_lines_r10__h3_is_hex}
+
+      - name: cell_area_m2
+        description: "H3 cell area in square meters (m²)."
+        tests:
+          - not_null
+          - non_negative:
+              column_name: cell_area_m2
+              config: {name: feat_h3_transit_point_lines_r10__cell_area_non_negative}
+
+      - name: cell_wkt_4326
+        tests:
+          - not_null
+          - wkt_not_empty:
+              column_name: cell_wkt_4326
+              config: {name: feat_h3_transit_point_lines_r10__cell_wkt_not_empty}
+          - wkt_prefix_any:
+              arguments: {column_name: cell_wkt_4326, prefixes: ["POLYGON","MULTIPOLYGON"]}
+              config: {name: feat_h3_transit_point_lines_r10__cell_wkt_prefix_polygonal}
+
+      - name: cell_center_wkt_4326
+        tests:
+          - not_null
+          - wkt_not_empty:
+              column_name: cell_center_wkt_4326
+              config: {name: feat_h3_transit_point_lines_r10__center_wkt_not_empty}
+          - wkt_prefix_any:
+              arguments: {column_name: cell_center_wkt_4326, prefixes: ["POINT"]}
+              config: {name: feat_h3_transit_point_lines_r10__center_wkt_prefix_point}
+
+      - name: transit_points_cnt
+        tests:
+          - not_null
+          - non_negative:
+              column_name: transit_points_cnt
+              config: {name: feat_h3_transit_point_lines_r10__points_cnt_non_negative}
+
+      - name: transit_lines_len_m_sum
+        tests:
+          - not_null
+          - non_negative:
+              column_name: transit_lines_len_m_sum
+              config: {name: feat_h3_transit_point_lines_r10__lines_len_non_negative}
+
+      - name: transit_points_per_km2
+        tests:
+          - non_negative:
+              column_name: transit_points_per_km2
+              config: {name: feat_h3_transit_point_lines_r10__points_per_km2_non_negative}
+
+      - name: transit_lines_m_per_km2
+        tests:
+          - non_negative:
+              column_name: transit_lines_m_per_km2
+              config: {name: feat_h3_transit_point_lines_r10__lines_m_per_km2_non_negative}
+
+      - name: has_transit
+        tests: [not_null]
+
+      - name: last_load_ts
+        description: "NULL for empty cells; otherwise greatest of points/lines last load timestamp."
