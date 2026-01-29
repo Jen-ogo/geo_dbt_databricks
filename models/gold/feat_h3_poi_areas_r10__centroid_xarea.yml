@@ -1,0 +1,279 @@
+version: 2
+
+models:
+  - name: feat_h3_poi_areas_r10__centroid_xarea
+    description: >
+      GOLD POI AREAS (CENTROID_XAREA) on H3 resolution 10 (Databricks).
+      Each polygon is assigned to exactly one candidate H3 cell using its centroid.
+      For that centroid-cell only, we compute the exact intersection area (m²) between the polygon and
+      the H3 cell polygon and aggregate per (region_code, region, h3_r10).
+
+      This is NOT polyfill: polygons spanning many cells will be under-attributed by design.
+      The output is a cost-efficient ML-friendly feature mart.
+
+      Grain: (region_code, region, h3_r10) with h3_r10 as canonical hex STRING.
+      
+      Notes: Heavy model by design; tagged as `heavy`.
+
+    tests:
+      - rowcount_gt_0:
+          config:
+            name: feat_h3_poi_areas_r10__centroid_xarea__rowcount_gt_0
+
+      - dbt_utils.unique_combination_of_columns:
+          combination_of_columns: [region_code, region, h3_r10]
+          config:
+            name: feat_h3_poi_areas_r10__centroid_xarea__uk_region_region_h3
+
+    columns:
+      - name: region_code
+        description: "Project region/country code (e.g., poland, germany)."
+        tests: [not_null]
+
+      - name: region
+        description: "Administrative region name within region_code."
+        tests: [not_null]
+
+      - name: h3_r10
+        description: "H3 cell index at resolution 10 as hex STRING."
+        tests:
+          - not_null
+          - is_h3_hex:
+              config:
+                name: feat_h3_poi_areas_r10__centroid_xarea__h3_r10_is_h3_hex
+
+      - name: cell_area_m2
+        description: "H3 cell area in m² from SILVER.DIM_H3_R10_CELLS."
+        tests:
+          - not_null
+          - non_negative:
+              arguments:
+                column_name: cell_area_m2
+              config:
+                name: feat_h3_poi_areas_r10__centroid_xarea__cell_area_m2_non_negative
+
+      - name: cell_wkt_4326
+        description: "H3 cell boundary WKT in EPSG:4326 (debug)."
+        tests:
+          - not_null
+          - wkt_not_empty:
+              arguments:
+                column_name: cell_wkt_4326
+              config:
+                name: feat_h3_poi_areas_r10__centroid_xarea__cell_wkt_not_empty
+          - wkt_prefix_any:
+              arguments:
+                column_name: cell_wkt_4326
+                prefixes: ["POLYGON", "MULTIPOLYGON"]
+              config:
+                name: feat_h3_poi_areas_r10__centroid_xarea__cell_wkt_prefix_polygonal
+
+      - name: cell_center_wkt_4326
+        description: "H3 cell center WKT POINT in EPSG:4326 (debug)."
+        tests:
+          - not_null
+          - wkt_not_empty:
+              arguments:
+                column_name: cell_center_wkt_4326
+              config:
+                name: feat_h3_poi_areas_r10__centroid_xarea__cell_center_wkt_not_empty
+          - wkt_prefix_any:
+              arguments:
+                column_name: cell_center_wkt_4326
+                prefixes: ["POINT"]
+              config:
+                name: feat_h3_poi_areas_r10__centroid_xarea__cell_center_wkt_prefix_point
+
+      - name: poi_areas_cnt
+        description: "Distinct POI polygon count attributed to the centroid cell."
+        tests:
+          - not_null
+          - non_negative:
+              arguments:
+                column_name: poi_areas_cnt
+              config:
+                name: feat_h3_poi_areas_r10__centroid_xarea__poi_areas_cnt_non_negative
+
+      - name: poi_area_m2_sum
+        description: "Sum of polygon∩cell intersection areas (m²) for centroid-attributed polygons."
+        tests:
+          - non_negative:
+              arguments:
+                column_name: poi_area_m2_sum
+              config:
+                name: feat_h3_poi_areas_r10__centroid_xarea__poi_area_m2_sum_non_negative
+
+      - name: poi_area_share
+        description: "poi_area_m2_sum / cell_area_m2. May exceed 1 due to overlaps."
+        tests:
+          - non_negative:
+              arguments:
+                column_name: poi_area_share
+              config:
+                name: feat_h3_poi_areas_r10__centroid_xarea__poi_area_share_non_negative
+
+      - name: amenity_areas_cnt
+        description: "Distinct amenity polygons attributed to the cell."
+        tests:
+          - non_negative:
+              arguments:
+                column_name: amenity_areas_cnt
+              config:
+                name: feat_h3_poi_areas_r10__centroid_xarea__amenity_areas_cnt_non_negative
+
+      - name: shop_areas_cnt
+        description: "Distinct shop polygons attributed to the cell."
+        tests:
+          - non_negative:
+              arguments:
+                column_name: shop_areas_cnt
+              config:
+                name: feat_h3_poi_areas_r10__centroid_xarea__shop_areas_cnt_non_negative
+
+      - name: tourism_areas_cnt
+        description: "Distinct tourism polygons attributed to the cell."
+        tests:
+          - non_negative:
+              arguments:
+                column_name: tourism_areas_cnt
+              config:
+                name: feat_h3_poi_areas_r10__centroid_xarea__tourism_areas_cnt_non_negative
+
+      - name: office_areas_cnt
+        description: "Distinct office polygons attributed to the cell."
+        tests:
+          - non_negative:
+              arguments:
+                column_name: office_areas_cnt
+              config:
+                name: feat_h3_poi_areas_r10__centroid_xarea__office_areas_cnt_non_negative
+
+      - name: leisure_areas_cnt
+        description: "Distinct leisure polygons attributed to the cell."
+        tests:
+          - non_negative:
+              arguments:
+                column_name: leisure_areas_cnt
+              config:
+                name: feat_h3_poi_areas_r10__centroid_xarea__leisure_areas_cnt_non_negative
+
+      - name: sport_areas_cnt
+        description: "Distinct sport polygons attributed to the cell."
+        tests:
+          - non_negative:
+              arguments:
+                column_name: sport_areas_cnt
+              config:
+                name: feat_h3_poi_areas_r10__centroid_xarea__sport_areas_cnt_non_negative
+
+      - name: building_areas_cnt
+        description: "Distinct building-class polygons attributed to the cell."
+        tests:
+          - non_negative:
+              arguments:
+                column_name: building_areas_cnt
+              config:
+                name: feat_h3_poi_areas_r10__centroid_xarea__building_areas_cnt_non_negative
+
+      - name: landuse_areas_cnt
+        description: "Distinct landuse polygons attributed to the cell."
+        tests:
+          - non_negative:
+              arguments:
+                column_name: landuse_areas_cnt
+              config:
+                name: feat_h3_poi_areas_r10__centroid_xarea__landuse_areas_cnt_non_negative
+
+      - name: amenity_area_m2_sum
+        description: "Sum of intersection areas for amenity polygons (m²)."
+        tests:
+          - non_negative:
+              arguments:
+                column_name: amenity_area_m2_sum
+              config:
+                name: feat_h3_poi_areas_r10__centroid_xarea__amenity_area_m2_sum_non_negative
+
+      - name: shop_area_m2_sum
+        description: "Sum of intersection areas for shop polygons (m²)."
+        tests:
+          - non_negative:
+              arguments:
+                column_name: shop_area_m2_sum
+              config:
+                name: feat_h3_poi_areas_r10__centroid_xarea__shop_area_m2_sum_non_negative
+
+      - name: tourism_area_m2_sum
+        description: "Sum of intersection areas for tourism polygons (m²)."
+        tests:
+          - non_negative:
+              arguments:
+                column_name: tourism_area_m2_sum
+              config:
+                name: feat_h3_poi_areas_r10__centroid_xarea__tourism_area_m2_sum_non_negative
+
+      - name: office_area_m2_sum
+        description: "Sum of intersection areas for office polygons (m²)."
+        tests:
+          - non_negative:
+              arguments:
+                column_name: office_area_m2_sum
+              config:
+                name: feat_h3_poi_areas_r10__centroid_xarea__office_area_m2_sum_non_negative
+
+      - name: leisure_area_m2_sum
+        description: "Sum of intersection areas for leisure polygons (m²)."
+        tests:
+          - non_negative:
+              arguments:
+                column_name: leisure_area_m2_sum
+              config:
+                name: feat_h3_poi_areas_r10__centroid_xarea__leisure_area_m2_sum_non_negative
+
+      - name: sport_area_m2_sum
+        description: "Sum of intersection areas for sport polygons (m²)."
+        tests:
+          - non_negative:
+              arguments:
+                column_name: sport_area_m2_sum
+              config:
+                name: feat_h3_poi_areas_r10__centroid_xarea__sport_area_m2_sum_non_negative
+
+      - name: building_area_m2_sum
+        description: "Sum of intersection areas for building polygons (m²)."
+        tests:
+          - non_negative:
+              arguments:
+                column_name: building_area_m2_sum
+              config:
+                name: feat_h3_poi_areas_r10__centroid_xarea__building_area_m2_sum_non_negative
+
+      - name: landuse_area_m2_sum
+        description: "Sum of intersection areas for landuse polygons (m²)."
+        tests:
+          - non_negative:
+              arguments:
+                column_name: landuse_area_m2_sum
+              config:
+                name: feat_h3_poi_areas_r10__centroid_xarea__landuse_area_m2_sum_non_negative
+
+      - name: poi_areas_per_km2
+        description: "Distinct POI areas per km² of H3 cell."
+        tests:
+          - non_negative:
+              arguments:
+                column_name: poi_areas_per_km2
+              config:
+                name: feat_h3_poi_areas_r10__centroid_xarea__poi_areas_per_km2_non_negative
+
+      - name: poi_area_m2_per_km2
+        description: "Intersection area (m²) per km² of H3 cell."
+        tests:
+          - non_negative:
+              arguments:
+                column_name: poi_area_m2_per_km2
+              config:
+                name: feat_h3_poi_areas_r10__centroid_xarea__poi_area_m2_per_km2_non_negative
+
+      - name: last_load_ts
+        description: "Latest load timestamp among contributing polygons."
+        tests: [not_null]

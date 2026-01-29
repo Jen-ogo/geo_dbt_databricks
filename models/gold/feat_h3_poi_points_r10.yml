@@ -1,0 +1,188 @@
+version: 2
+
+models:
+  - name: feat_h3_poi_points_r10
+    description: >
+      GOLD.FEAT_H3_POI_POINTS_R10 — POI points intensity features on the H3 resolution 10 grid for EV siting.
+
+      Built directly in GOLD by aggregating SILVER.POI_POINTS into H3 R10 (hex STRING), then LEFT JOINing
+      onto the full H3 grid from SILVER.DIM_H3_R10_CELLS to keep all cells (including empty ones).
+
+      Grain: (region_code, region, h3_r10).
+      Important: h3_r10 is STRING (project standard; no BIGINT).
+      last_load_ts is NULL for cells with zero POIs (expected).
+
+    tests:
+      - rowcount_gt_0:
+          config:
+            name: feat_h3_poi_points_r10__rowcount_gt_0
+
+      - dbt_utils.unique_combination_of_columns:
+          combination_of_columns: [region_code, region, h3_r10]
+          config:
+            name: feat_h3_poi_points_r10__uk_region_region_h3
+
+    columns:
+      - name: region_code
+        description: "Country/region code used across the project (e.g., poland, germany)."
+        tests: [not_null]
+
+      - name: region
+        description: "Administrative region label within region_code (voivodeship/land/etc.)."
+        tests: [not_null]
+
+      - name: h3_r10
+        description: "H3 cell index at resolution 10 as canonical hex STRING."
+        tests:
+          - not_null
+          - is_h3_hex:
+              config:
+                name: feat_h3_poi_points_r10__h3_r10_is_h3_hex
+
+      - name: cell_area_m2
+        description: "Area of the H3 cell polygon in square meters (from DIM_H3_R10_CELLS)."
+        tests:
+          - not_null
+          - non_negative:
+              config:
+                name: feat_h3_poi_points_r10__cell_area_m2_non_negative
+
+      - name: cell_wkt_4326
+        description: "H3 cell boundary WKT in EPSG:4326 (debug/QA)."
+        tests:
+          - not_null
+          - wkt_not_empty:
+              config:
+                name: feat_h3_poi_points_r10__cell_wkt_not_empty
+          - wkt_prefix_any:
+              arguments:
+                prefixes: ["POLYGON", "MULTIPOLYGON"]
+              config:
+                name: feat_h3_poi_points_r10__cell_wkt_prefix_polygonal
+
+      - name: cell_center_wkt_4326
+        description: "H3 cell center WKT POINT in EPSG:4326 (debug/QA)."
+        tests:
+          - not_null
+          - wkt_not_empty:
+              config:
+                name: feat_h3_poi_points_r10__cell_center_wkt_not_empty
+          - wkt_prefix_any:
+              arguments:
+                prefixes: ["POINT"]
+              config:
+                name: feat_h3_poi_points_r10__cell_center_wkt_prefix_point
+
+      - name: poi_points_cnt
+        description: "Total number of POI points assigned to the H3 cell."
+        tests:
+          - not_null
+          - non_negative:
+              config:
+                name: feat_h3_poi_points_r10__poi_points_cnt_non_negative
+
+      - name: poi_classes_cnt
+        description: "Number of distinct poi_class values in the cell (diversity proxy)."
+        tests:
+          - not_null
+          - non_negative:
+              config:
+                name: feat_h3_poi_points_r10__poi_classes_cnt_non_negative
+
+      - name: poi_types_cnt
+        description: "Number of distinct poi_type values in the cell (diversity proxy)."
+        tests:
+          - not_null
+          - non_negative:
+              config:
+                name: feat_h3_poi_points_r10__poi_types_cnt_non_negative
+
+      # class buckets
+      - name: amenity_cnt
+        description: "Count of POIs with poi_class='amenity' in the cell."
+        tests: [non_negative]
+
+      - name: shop_cnt
+        description: "Count of POIs with poi_class='shop' in the cell."
+        tests: [non_negative]
+
+      - name: tourism_cnt
+        description: "Count of POIs with poi_class='tourism' in the cell."
+        tests: [non_negative]
+
+      - name: leisure_cnt
+        description: "Count of POIs with poi_class='leisure' in the cell."
+        tests: [non_negative]
+
+      - name: office_cnt
+        description: "Count of POIs with poi_class='office' in the cell."
+        tests: [non_negative]
+
+      - name: craft_cnt
+        description: "Count of POIs with poi_class='craft' in the cell."
+        tests: [non_negative]
+
+      - name: man_made_cnt
+        description: "Count of POIs with poi_class='man_made' in the cell."
+        tests: [non_negative]
+
+      - name: emergency_cnt
+        description: "Count of POIs with poi_class='emergency' in the cell."
+        tests: [non_negative]
+
+      - name: public_transport_cnt
+        description: "Count of POIs with poi_class='public_transport' in the cell."
+        tests: [non_negative]
+
+      - name: railway_cnt
+        description: "Count of POIs with poi_class='railway' in the cell."
+        tests: [non_negative]
+
+      - name: highway_cnt
+        description: "Count of POIs with poi_class='highway' in the cell."
+        tests: [non_negative]
+
+      - name: place_cnt
+        description: "Count of POIs with poi_class='place' in the cell."
+        tests: [non_negative]
+
+      # EV buckets by poi_type
+      - name: parking_cnt
+        description: "Count of parking-related POIs (parking, parking_entrance, bicycle_parking)."
+        tests: [non_negative]
+
+      - name: mobility_services_cnt
+        description: "Count of mobility-service POIs (fuel, charging_station, car_wash, car_rental, car_sharing, parking_space)."
+        tests: [non_negative]
+
+      - name: retail_core_cnt
+        description: "Count of core retail anchor POIs (supermarket, convenience, mall, department_store, hardware, doityourself)."
+        tests: [non_negative]
+
+      - name: food_cnt
+        description: "Count of food & beverage POIs (restaurant, fast_food, cafe, bar, pub)."
+        tests: [non_negative]
+
+      - name: lodging_cnt
+        description: "Count of lodging POIs (hotel, motel, hostel, guest_house, apartments)."
+        tests: [non_negative]
+
+      - name: health_cnt
+        description: "Count of health-related POIs (hospital, clinic, doctors, pharmacy)."
+        tests: [non_negative]
+
+      # densities (minimal)
+      - name: poi_points_per_km2
+        description: "POI points density per km² (poi_points_cnt normalized by cell area)."
+        tests: [non_negative]
+
+      - name: parking_per_km2
+        description: "Parking POI density per km²."
+        tests: [non_negative]
+
+      - name: mobility_services_per_km2
+        description: "Mobility services POI density per km²."
+        tests: [non_negative]
+
+      - name: last_load_ts
+        description: "Max load_ts among POIs contributing to the cell; NULL for empty cells."

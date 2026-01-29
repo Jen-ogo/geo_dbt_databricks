@@ -1,0 +1,168 @@
+version: 2
+
+models:
+  - name: feat_h3_poi_areas_r10_xarea_classbuckets
+    description: >
+      GOLD (Databricks) — sparse H3 r10 POI areas feature mart using centroid assignment + exact intersection area (XAREA).
+      Source:
+      - SILVER.POI_AREAS (geom, feature_id, poi_class, poi_type, region_code, region, load_ts)
+      - SILVER.DIM_H3_R10_CELLS (cell_wkt_4326, cell_center_wkt_4326, region_code, region, h3_r10)
+
+      Method:
+      - Candidate cell: polygon centroid -> H3 r10 (via project helper macro).
+      - Exact covered area: ST_Area( GEOGRAPHY( ST_Intersection(poi_geom, cell_geom) ) ).
+      - Aggregation: totals + 8 fixed poi_class buckets (counts + xarea sums + shares).
+
+      Grain:
+      - (region_code, region, h3_r10) — only covered cells (sparse).
+
+      Notes:
+      - Heavy model by design; tagged as `heavy`.
+
+    tests:
+      - rowcount_gt_0:
+          config:
+            name: feat_h3_poi_areas_r10_xarea_classbuckets__rowcount_gt_0
+
+      - dbt_utils.unique_combination_of_columns:
+          combination_of_columns: [region_code, region, h3_r10]
+          config:
+            name: feat_h3_poi_areas_r10_xarea_classbuckets__uk_region_region_h3
+
+    columns:
+      - name: region_code
+        description: "Region/country code (project standard)."
+        tests: [not_null]
+
+      - name: region
+        description: "Administrative region name/code (project standard)."
+        tests: [not_null]
+
+      - name: h3_r10
+        description: "H3 cell index at resolution 10."
+        tests:
+          - not_null
+          - is_h3_hex:
+              config:
+                name: feat_h3_poi_areas_r10_xarea_classbuckets__h3_r10_is_hex
+
+      - name: cell_area_m2
+        description: "H3 cell area in m² (computed via GEOGRAPHY from cell_wkt_4326)."
+        tests:
+          - not_null
+          - non_negative:
+              config:
+                name: feat_h3_poi_areas_r10_xarea_classbuckets__cell_area_m2_non_negative
+
+      - name: cell_wkt_4326
+        description: "H3 cell boundary WKT (debug)."
+        tests:
+          - not_null
+          - wkt_not_empty:
+              config:
+                name: feat_h3_poi_areas_r10_xarea_classbuckets__cell_wkt_not_empty
+          - wkt_prefix_any:
+              arguments:
+                prefixes: ["POLYGON", "MULTIPOLYGON"]
+              config:
+                name: feat_h3_poi_areas_r10_xarea_classbuckets__cell_wkt_prefix_polygon
+
+      - name: cell_center_wkt_4326
+        description: "H3 cell center WKT POINT (debug)."
+        tests:
+          - not_null
+          - wkt_not_empty:
+              config:
+                name: feat_h3_poi_areas_r10_xarea_classbuckets__cell_center_wkt_not_empty
+          - wkt_prefix_any:
+              arguments:
+                prefixes: ["POINT"]
+              config:
+                name: feat_h3_poi_areas_r10_xarea_classbuckets__cell_center_wkt_prefix_point
+
+      - name: has_poi_areas
+        description: "Always TRUE for sparse output."
+        tests: [not_null]
+
+      - name: poi_areas_cnt
+        description: "Distinct POI polygons count (centroid-assigned)."
+        tests:
+          - not_null
+          - non_negative:
+              config:
+                name: feat_h3_poi_areas_r10_xarea_classbuckets__poi_areas_cnt_non_negative
+
+      - name: poi_xarea_m2_sum
+        description: "Sum of polygon intersection areas within the H3 cell (m²)."
+        tests:
+          - non_negative:
+              config:
+                name: feat_h3_poi_areas_r10_xarea_classbuckets__poi_xarea_m2_sum_non_negative
+
+      - name: poi_xarea_share
+        description: "poi_xarea_m2_sum / cell_area_m2 (may exceed 1 if overlaps)."
+        tests:
+          - non_negative:
+              config:
+                name: feat_h3_poi_areas_r10_xarea_classbuckets__poi_xarea_share_non_negative
+
+      - name: last_load_ts
+        description: "Latest load timestamp among contributing polygons."
+        tests: [not_null]
+
+      # class buckets (counts)
+      - name: poi_amenity_cnt
+        tests: [{non_negative: {config: {name: feat_h3_poi_areas__amenity_cnt_non_negative}}}]
+      - name: poi_shop_cnt
+        tests: [{non_negative: {config: {name: feat_h3_poi_areas__shop_cnt_non_negative}}}]
+      - name: poi_tourism_cnt
+        tests: [{non_negative: {config: {name: feat_h3_poi_areas__tourism_cnt_non_negative}}}]
+      - name: poi_office_cnt
+        tests: [{non_negative: {config: {name: feat_h3_poi_areas__office_cnt_non_negative}}}]
+      - name: poi_leisure_cnt
+        tests: [{non_negative: {config: {name: feat_h3_poi_areas__leisure_cnt_non_negative}}}]
+      - name: poi_sport_cnt
+        tests: [{non_negative: {config: {name: feat_h3_poi_areas__sport_cnt_non_negative}}}]
+      - name: poi_building_cnt
+        tests: [{non_negative: {config: {name: feat_h3_poi_areas__building_cnt_non_negative}}}]
+      - name: poi_landuse_cnt
+        tests: [{non_negative: {config: {name: feat_h3_poi_areas__landuse_cnt_non_negative}}}]
+
+  - name: feat_h3_poi_areas_r10_xarea_classbuckets_dense
+    description: >
+      GOLD (Databricks) — dense version of feat_h3_poi_areas_r10_xarea_classbuckets.
+      Emits one row per (region_code, region, h3_r10) from DIM_H3_R10_CELLS,
+      left joining sparse features and filling zeros. last_load_ts is NULL for empty cells.
+      Tagged as `heavy` (depends on sparse heavy model).
+
+    tests:
+      - rowcount_gt_0:
+          config:
+            name: feat_h3_poi_areas_r10_xarea_classbuckets_dense__rowcount_gt_0
+
+      - dbt_utils.unique_combination_of_columns:
+          combination_of_columns: [region_code, region, h3_r10]
+          config:
+            name: feat_h3_poi_areas_r10_xarea_classbuckets_dense__uk_region_region_h3
+
+    columns:
+      - name: region_code
+        tests: [not_null]
+      - name: region
+        tests: [not_null]
+      - name: h3_r10
+        tests:
+          - not_null
+          - is_h3_hex:
+              config:
+                name: feat_h3_poi_areas_r10_xarea_classbuckets_dense__h3_r10_is_hex
+      - name: has_poi_areas
+        tests: [not_null]
+      - name: poi_areas_cnt
+        tests:
+          - not_null
+          - non_negative:
+              config:
+                name: feat_h3_poi_areas_r10_xarea_classbuckets_dense__poi_areas_cnt_non_negative
+      - name: last_load_ts
+        description: "Nullable for empty cells."
