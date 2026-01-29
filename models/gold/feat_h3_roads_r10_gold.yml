@@ -1,0 +1,149 @@
+version: 2
+
+models:
+  - name: feat_h3_roads_r10_gold
+    description: >
+      **GOLD.FEAT_H3_ROADS_R10_GOLD** — road-network intensity features on H3 resolution 10 (Databricks).
+
+      **Source (reused, no re-aggregation in GOLD)**
+      - Built directly from **SILVER.FEAT_H3_ROADS_R10**.
+      - GOLD intentionally **does not** re-run segment→H3 aggregation and **does not** recompute H3 cell geometry.
+        This follows the project rule: **do not re-calculate existing Silver logic in Gold**.
+
+      **Grain**
+      - Exactly one row per:
+        **(region_code, region, h3_r10)**,
+        where **h3_r10 is canonical HEX STRING**.
+
+      **What this GOLD model adds (derived only)**
+      - Density metrics per km² computed from Silver measures + cell area:
+        - `road_segments_per_km2`
+        - `roads_len_m_per_km2`
+        - `roads_major_len_m_per_km2`
+
+      **Columns (high level)**
+      - H3 cell debug geometry from Silver:
+        `cell_wkt_4326`, `cell_center_wkt_4326`, `cell_area_m2`
+      - Road aggregates from Silver:
+        `roads_len_m_sum`, `roads_major_len_m_sum`, `road_segments_cnt`,
+        `maxspeed_avg_kph`, `maxspeed_p50_kph`, `lanes_avg`, `lanes_p50`, `oneway_share`
+      - Lineage / recency:
+        `last_load_ts` (from Silver aggregation)
+
+      **Nullability / expected behavior**
+      - Because SILVER uses **LEFT JOIN** from the full H3 cell set, some cells may have **no road segments**.
+        For those cells, aggregation fields (including `last_load_ts`) can be **NULL**.
+        This is expected and must not fail builds; we monitor anomalies via WARN-level tests where needed.
+
+      **Data-quality philosophy (GOLD)**
+      - Strict on structure and identifiers (rowcount, keys, H3 format, geometry presence).
+      - Soft (WARN) on business anomalies like share bounds.
+
+    tests:
+      - rowcount_gt_0
+
+      - dbt_utils.unique_combination_of_columns:
+          combination_of_columns: [region_code, region, h3_r10]
+          config:
+            name: feat_h3_roads_r10_gold__uk_region_region_h3
+
+      - num_between_or_null:
+          column_name: oneway_share
+          min_value: 0
+          max_value: 1
+          config:
+            name: feat_h3_roads_r10_gold__oneway_share_0_1_warn
+            severity: warn
+
+    columns:
+      - name: region_code
+        tests: [not_null]
+
+      - name: region
+        tests: [not_null]
+
+      - name: h3_r10
+        tests:
+          - not_null
+          - is_h3_hex:
+              config:
+                name: feat_h3_roads_r10_gold__h3_r10_is_h3_hex
+
+      - name: cell_area_m2
+        tests:
+          - not_null
+          - non_negative:
+              column_name: cell_area_m2
+
+      - name: cell_wkt_4326
+        tests:
+          - not_null
+          - wkt_not_empty:
+              column_name: cell_wkt_4326
+          - wkt_prefix_any:
+              column_name: cell_wkt_4326
+              prefixes: ["POLYGON", "MULTIPOLYGON"]
+
+      - name: cell_center_wkt_4326
+        tests:
+          - not_null
+          - wkt_not_empty:
+              column_name: cell_center_wkt_4326
+          - wkt_prefix_any:
+              column_name: cell_center_wkt_4326
+              prefixes: ["POINT"]
+
+      - name: roads_len_m_sum
+        tests:
+          - non_negative:
+              column_name: roads_len_m_sum
+
+      - name: roads_major_len_m_sum
+        tests:
+          - non_negative:
+              column_name: roads_major_len_m_sum
+
+      - name: road_segments_cnt
+        tests:
+          - non_negative:
+              column_name: road_segments_cnt
+
+      - name: maxspeed_avg_kph
+        tests:
+          - non_negative:
+              column_name: maxspeed_avg_kph
+
+      - name: maxspeed_p50_kph
+        tests:
+          - non_negative:
+              column_name: maxspeed_p50_kph
+
+      - name: lanes_avg
+        tests:
+          - non_negative:
+              column_name: lanes_avg
+
+      - name: lanes_p50
+        tests:
+          - non_negative:
+              column_name: lanes_p50
+
+      - name: road_segments_per_km2
+        tests:
+          - non_negative:
+              column_name: road_segments_per_km2
+
+      - name: roads_len_m_per_km2
+        tests:
+          - non_negative:
+              column_name: roads_len_m_per_km2
+
+      - name: roads_major_len_m_per_km2
+        tests:
+          - non_negative:
+              column_name: roads_major_len_m_per_km2
+
+      - name: last_load_ts
+        description: >
+          Latest load timestamp from the contributing road segments in Silver.
+          Nullable for cells with no matching road segments (expected due to Silver LEFT JOIN).
