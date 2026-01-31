@@ -6,7 +6,6 @@
 
 with all_h3 as (
 
-  -- points: use point itself
   select region_code, region, h3_pointash3string(geom_wkt_4326, 10) as h3_r10
   from {{ ref('ev_chargers') }}
   where geom_wkt_4326 is not null
@@ -21,7 +20,6 @@ with all_h3 as (
   from {{ ref('transit_points') }}
   where geom_wkt_4326 is not null
 
-  -- lines/areas: use centroid
   union all
   select region_code, region,
          h3_pointash3string(st_astext(st_centroid(geom)), 10) as h3_r10
@@ -59,7 +57,6 @@ cells as (
     region,
     h3_r10,
 
-    -- boundary / center WKT directly from H3
     h3_boundaryaswkt(h3_stringtoh3(h3_r10)) as cell_wkt_4326,
     h3_centeraswkt(h3_stringtoh3(h3_r10))   as cell_center_wkt_4326
 
@@ -69,7 +66,7 @@ cells as (
 geo as (
   select
     *,
-    -- build GEOMETRY (srid=4326) for proper area calc
+
     st_setsrid(st_geomfromwkt(cell_wkt_4326), 4326) as cell_geom,
     st_setsrid(st_geomfromwkt(cell_center_wkt_4326), 4326) as cell_center_geom
   from cells
@@ -83,7 +80,6 @@ select
   cell_geom,
   cell_wkt_4326,
 
-  -- IMPORTANT: Databricks wants INT SRID, not 'EPSG:3035'
   st_area(st_transform(cell_geom, 3035)) as cell_area_m2,
 
   cell_center_geom,

@@ -10,7 +10,7 @@ models:
       Geometry:
         - geom (GEOMETRY, EPSG:4326)
         - geom_wkb (BINARY)
-        - geom_wkt_4326 (STRING debug)  <-- mandatory geo QA column
+        - geom_wkt_4326 (STRING debug) 
 
     tests:
       - rowcount_gt_0:
