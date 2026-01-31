@@ -1,0 +1,132 @@
+version: 2
+
+models:
+  - name: feat_h3r10_ev_stock_latest
+    description: >
+      Gold-level feature mart at H3 resolution 10 (cell as the unit of analysis) enriched with Eurostat EV stock metrics
+      at NUTS2 level (latest available year per NUTS2). The project scope is derived idempotently via spatial join:
+      admin_areas (admin_level=4) -> GISCO NUTS (year=2024, scale=01m, crs=4326, level=2). Each H3 cell is mapped
+      by its cell center to a NUTS2 polygon and receives the corresponding latest-year EV metrics (CAR, VG_LE3P5,
+      BUS_MCO_TRO) in both NR and PC units. The model includes NUTS2 geometry (GEOGRAPHY/GEOMETRY) and WKT debug
+      columns for traceability and data quality validation.
+
+    tests:
+      - not_empty
+      - rowcount_gt_0
+
+    columns:
+      - name: region_code
+        description: "Project region code (e.g., poland, germany)."
+        tests:
+          - not_null
+
+      - name: region
+        description: "Project region name (e.g., mazowieckie, nordrhein-westfalen)."
+        tests:
+          - not_null
+
+      - name: h3_r10
+        description: "H3 index at resolution 10; unique identifier of the analysis cell."
+        tests:
+          - not_null
+          - is_h3_hex
+          - unique
+
+      - name: cell_area_m2
+        description: "Area of the H3 R10 cell in square meters (from dim_h3_r10_cells)."
+        tests:
+          - not_null
+          - non_negative
+
+      - name: cell_wkt_4326
+        description: "WKT of the H3 R10 cell polygon in EPSG:4326 (debug/QA column)."
+        tests:
+          - not_null
+          - wkt_not_empty
+          - wkt_prefix_any:
+              prefixes: ['POLYGON', 'MULTIPOLYGON']
+
+      - name: cell_center_wkt_4326
+        description: "WKT of the H3 R10 cell center point in EPSG:4326 (used for spatial mapping to NUTS2)."
+        tests:
+          - not_null
+          - wkt_not_empty
+          - wkt_prefix_in:
+              prefixes: ['POINT']
+
+      - name: cntr_code
+        description: "Country code from GISCO NUTS (e.g., DE, PL)."
+        tests:
+          - not_null
+
+      - name: nuts_id
+        description: "NUTS2 identifier (geo) used to join Eurostat metrics."
+        tests:
+          - not_null
+
+      - name: nuts_level
+        description: "NUTS level. This model must contain only level=2 (NUTS2)."
+        tests:
+          - not_null
+          - values_in_or_null:
+              values: [2]
+
+      - name: nuts_name
+        description: "NUTS2 name (name_latn) from GISCO."
+        tests:
+          - not_null
+
+      - name: nuts_geom
+        description: "NUTS2 geometry in EPSG:4326 used for mapping traceability and QA."
+        tests:
+          - not_null
+
+      - name: nuts_wkt_4326
+        description: "WKT representation of NUTS2 geometry in EPSG:4326 (debug/QA column)."
+        tests:
+          - not_null
+          - wkt_not_empty
+          - wkt_prefix_any:
+              prefixes: ['POLYGON', 'MULTIPOLYGON']
+
+      - name: car_year_latest
+        description: "Latest available year in Eurostat for this NUTS2 (across selected vehicle/unit pairs)."
+        tests:
+          - not_null
+          - non_negative
+
+      - name: car_ev_nr_latest
+        description: "Eurostat EV stock: vehicle=CAR, unit=NR, value for car_year_latest."
+        tests:
+          - not_null
+          - non_negative
+
+      - name: car_ev_pc_latest
+        description: "Eurostat EV stock: vehicle=CAR, unit=PC, value for car_year_latest."
+        tests:
+          - not_null
+          - non_negative
+
+      - name: vg_le3p5_ev_nr_latest
+        description: "Eurostat EV stock: vehicle=VG_LE3P5, unit=NR, value for car_year_latest."
+        tests:
+          - not_null
+          - non_negative
+
+      - name: vg_le3p5_ev_pc_latest
+        description: "Eurostat EV stock: vehicle=VG_LE3P5, unit=PC, value for car_year_latest."
+        tests:
+          - not_null
+          - non_negative
+
+      - name: bus_ev_nr_latest
+        description: "Eurostat EV stock: vehicle=BUS_MCO_TRO, unit=NR, value for car_year_latest."
+        tests:
+          - not_null
+          - non_negative
+
+      - name: bus_ev_pc_latest
+        description: "Eurostat EV stock: vehicle=BUS_MCO_TRO, unit=PC, value for car_year_latest."
+        tests:
+          - not_null
+          - non_negative
