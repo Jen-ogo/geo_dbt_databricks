@@ -1,0 +1,161 @@
+version: 2
+
+models:
+  - name: feat_h3_charging_r7
+    description: >
+      GOLD charging + population features on H3 R7 (Databricks).
+      No intermediate charger mart: charger aggregation is computed directly in this model
+      from SILVER.EV_CHARGERS (point -> H3 via helper macro), and then joined to
+      GOLD.FEAT_H3_POP_R7 (which already carries H3 cell geometry/area from DIM_H3_R7_CELLS).
+
+      Grain: (region_code, region, h3_r7). H3 is canonical hex STRING.
+
+    tests:
+      - rowcount_gt_0:
+          config:
+            name: feat_h3_charging_r7__rowcount_gt_0
+
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns: [region_code, region, h3_r7]
+          config:
+            name: feat_h3_charging_r7__uk_region_region_h3
+
+    columns:
+      - name: region_code
+        tests: [not_null]
+
+      - name: region
+        tests: [not_null]
+
+      - name: h3_r7
+        tests:
+          - not_null
+          - is_h3_hex:
+              arguments:
+                column_name: h3_r7
+              config:
+                name: feat_h3_charging_r7__h3_r7_is_h3_hex
+
+      - name: cell_area_m2
+        tests:
+          - not_null
+          - non_negative:
+              arguments:
+                column_name: cell_area_m2
+              config:
+                name: feat_h3_charging_r7__cell_area_m2_non_negative
+
+      - name: cell_wkt_4326
+        tests:
+          - not_null
+          - wkt_not_empty:
+              arguments:
+                column_name: cell_wkt_4326
+              config:
+                name: feat_h3_charging_r7__cell_wkt_not_empty
+          - wkt_prefix_any:
+              arguments:
+                column_name: cell_wkt_4326
+                prefixes: ["POLYGON", "MULTIPOLYGON"]
+              config:
+                name: feat_h3_charging_r7__cell_wkt_prefix_poly
+
+      - name: cell_center_wkt_4326
+        tests:
+          - not_null
+          - wkt_not_empty:
+              arguments:
+                column_name: cell_center_wkt_4326
+              config:
+                name: feat_h3_charging_r7__cell_center_wkt_not_empty
+          - wkt_prefix_any:
+              arguments:
+                column_name: cell_center_wkt_4326
+                prefixes: ["POINT"]
+              config:
+                name: feat_h3_charging_r7__cell_center_wkt_prefix_point
+
+      - name: chargers_cnt
+        tests:
+          - not_null
+          - non_negative:
+              arguments:
+                column_name: chargers_cnt
+              config:
+                name: feat_h3_charging_r7__chargers_cnt_non_negative
+
+      - name: sockets_cnt_sum
+        tests:
+          - not_null
+          - non_negative:
+              arguments:
+                column_name: sockets_cnt_sum
+              config:
+                name: feat_h3_charging_r7__sockets_cnt_sum_non_negative
+
+      - name: chargers_dc_cnt
+        tests:
+          - not_null
+          - non_negative:
+              arguments:
+                column_name: chargers_dc_cnt
+              config:
+                name: feat_h3_charging_r7__chargers_dc_cnt_non_negative
+
+      - name: chargers_ac_cnt
+        tests:
+          - not_null
+          - non_negative:
+              arguments:
+                column_name: chargers_ac_cnt
+              config:
+                name: feat_h3_charging_r7__chargers_ac_cnt_non_negative
+
+      - name: pop_total
+        tests:
+          - non_negative:
+              arguments:
+                column_name: pop_total
+              config:
+                name: feat_h3_charging_r7__pop_total_non_negative
+
+      - name: chargers_per_10k_pop
+        description: "chargers_cnt * 10000 / pop_total"
+        tests:
+          - non_negative:
+              arguments:
+                column_name: chargers_per_10k_pop
+              config:
+                name: feat_h3_charging_r7__chargers_per_10k_non_negative
+
+      - name: sockets_per_10k_pop
+        description: "sockets_cnt_sum * 10000 / pop_total"
+        tests:
+          - non_negative:
+              arguments:
+                column_name: sockets_per_10k_pop
+              config:
+                name: feat_h3_charging_r7__sockets_per_10k_non_negative
+
+      - name: chargers_per_km2
+        description: "chargers_cnt / (cell_area_m2 / 1e6)"
+        tests:
+          - non_negative:
+              arguments:
+                column_name: chargers_per_km2
+              config:
+                name: feat_h3_charging_r7__chargers_per_km2_non_negative
+
+      - name: sockets_per_km2
+        description: "sockets_cnt_sum / (cell_area_m2 / 1e6)"
+        tests:
+          - non_negative:
+              arguments:
+                column_name: sockets_per_km2
+              config:
+                name: feat_h3_charging_r7__sockets_per_km2_non_negative
+
+      - name: last_load_ts
+        description: "greatest(chargers_last_load_ts, pop_last_load_ts)"
+        tests: [not_null]
