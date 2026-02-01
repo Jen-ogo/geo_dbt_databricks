@@ -1,0 +1,189 @@
+version: 2
+
+models:
+  - name: feat_h3_macro_kring_r7
+    description: >
+      GOLD macro-level mart for H3 R7 cells. For each center cell we build a k-ring neighborhood
+      (k chosen by DEGURBA: urban/suburban/rural) and aggregate existing R7 feature marts across
+      all neighbor cells. Output contains k-ring totals and derived densities for macro scoring.
+
+      Grain: (region_code, region, h3_r7, k)
+
+    tests:
+      - rowcount_gt_0:
+          config:
+            name: feat_h3_macro_kring_r7__rowcount_gt_0
+
+      - dbt_utils.unique_combination_of_columns:
+          combination_of_columns: [region_code, region, h3_r7, k]
+          config:
+            name: feat_h3_macro_kring_r7__uk_region_region_h3_k
+
+    columns:
+      - name: region_code
+        description: "Project region/country code (e.g., poland, germany)."
+        tests: [not_null]
+
+      - name: region
+        description: "Administrative region name within region_code."
+        tests: [not_null]
+
+      - name: h3_r7
+        description: "H3 index at resolution 7 (hex string) of the center cell."
+        tests:
+          - not_null
+          - is_h3_hex:
+              config:
+                name: feat_h3_macro_kring_r7__h3_r7_is_h3_hex
+
+      - name: degurba
+        description: "DEGURBA class for the center cell (1=city, 2=towns/suburbs, 3=rural). Nullable if unknown."
+        tests:
+          - values_in_or_null:
+              arguments:
+                column_name: degurba
+                values: [1, 2, 3]
+              config:
+                name: feat_h3_macro_kring_r7__degurba_allowed
+
+      - name: k
+        description: "k-ring radius used for neighborhood aggregation (chosen by degurba)."
+        tests:
+          - not_null
+          - non_negative:
+              arguments:
+                column_name: k
+              config:
+                name: feat_h3_macro_kring_r7__k_non_negative
+
+      - name: kring_area_m2
+        description: "Sum of neighbor cell areas (m²) included in the k-ring."
+        tests:
+          - not_null
+          - non_negative:
+              arguments:
+                column_name: kring_area_m2
+              config:
+                name: feat_h3_macro_kring_r7__kring_area_m2_non_negative
+
+      - name: pop_total_kring
+        tests:
+          - not_null
+          - non_negative:
+              arguments:
+                column_name: pop_total_kring
+              config:
+                name: feat_h3_macro_kring_r7__pop_total_kring_non_negative
+
+      - name: emp_total_kring
+        tests:
+          - not_null
+          - non_negative:
+              arguments:
+                column_name: emp_total_kring
+              config:
+                name: feat_h3_macro_kring_r7__emp_total_kring_non_negative
+
+      - name: chargers_cnt_kring
+        tests:
+          - not_null
+          - non_negative:
+              arguments:
+                column_name: chargers_cnt_kring
+              config:
+                name: feat_h3_macro_kring_r7__chargers_cnt_kring_non_negative
+
+      - name: poi_points_cnt_kring
+        tests:
+          - not_null
+          - non_negative:
+              arguments:
+                column_name: poi_points_cnt_kring
+              config:
+                name: feat_h3_macro_kring_r7__poi_points_cnt_kring_non_negative
+
+      - name: buildings_cnt_kring
+        tests:
+          - not_null
+          - non_negative:
+              arguments:
+                column_name: buildings_cnt_kring
+              config:
+                name: feat_h3_macro_kring_r7__buildings_cnt_kring_non_negative
+
+      - name: roads_len_m_sum_kring
+        tests:
+          - not_null
+          - non_negative:
+              arguments:
+                column_name: roads_len_m_sum_kring
+              config:
+                name: feat_h3_macro_kring_r7__roads_len_m_sum_kring_non_negative
+
+      - name: roads_major_len_m_sum_kring
+        tests:
+          - not_null
+          - non_negative:
+              arguments:
+                column_name: roads_major_len_m_sum_kring
+              config:
+                name: feat_h3_macro_kring_r7__roads_major_len_m_sum_kring_non_negative
+
+      - name: transit_points_cnt_kring
+        tests:
+          - not_null
+          - non_negative:
+              arguments:
+                column_name: transit_points_cnt_kring
+              config:
+                name: feat_h3_macro_kring_r7__transit_points_cnt_kring_non_negative
+
+      - name: transit_lines_len_m_sum_kring
+        tests:
+          - not_null
+          - non_negative:
+              arguments:
+                column_name: transit_lines_len_m_sum_kring
+              config:
+                name: feat_h3_macro_kring_r7__transit_lines_len_m_sum_kring_non_negative
+
+      - name: chargers_per_km2_kring
+        tests:
+          - non_negative:
+              arguments:
+                column_name: chargers_per_km2_kring
+              config:
+                name: feat_h3_macro_kring_r7__chargers_per_km2_kring_non_negative
+
+      - name: poi_points_per_km2_kring
+        tests:
+          - non_negative:
+              arguments:
+                column_name: poi_points_per_km2_kring
+              config:
+                name: feat_h3_macro_kring_r7__poi_points_per_km2_kring_non_negative
+
+      - name: buildings_per_km2_kring
+        tests:
+          - non_negative:
+              arguments:
+                column_name: buildings_per_km2_kring
+              config:
+                name: feat_h3_macro_kring_r7__buildings_per_km2_kring_non_negative
+
+      - name: roads_len_m_per_km2_kring
+        tests:
+          - non_negative:
+              arguments:
+                column_name: roads_len_m_per_km2_kring
+              config:
+                name: feat_h3_macro_kring_r7__roads_len_m_per_km2_kring_non_negative
+
+      - name: chargers_per_10k_pop_kring
+        description: "chargers_cnt_kring * 10000 / pop_total_kring (NULL if pop_total_kring=0)."
+        tests:
+          - non_negative:
+              arguments:
+                column_name: chargers_per_10k_pop_kring
+              config:
+                name: feat_h3_macro_kring_r7__chargers_per_10k_pop_kring_non_negative
