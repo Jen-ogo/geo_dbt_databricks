@@ -11,7 +11,25 @@ dbt project for the GEO pipeline (Databricks / Delta). Builds curated **SILVER**
   (dedup, normalized types, consistent `region_code`, mandatory WKT debug fields, H3-ready attributes)
 - **GOLD**: modeling / feature-ready marts  
   (H3 grids, aggregates, ML features; **prefer reusing SILVER aggregations**)
+Macro vs Micro feature marts (GOLD)
 
+To support scalable EV-siting and keep compute costs predictable, GOLD is split into two tiers:
+
+MACRO (coarse grid, candidate discovery)
+	•	Built on H3 R7 (and in some cases other coarse grids).
+	•	Covers the full region grid (all cells from dim_h3_r7_cells).
+	•	Purpose: generate candidate ranking / shortlist (where it makes sense to place EV charging).
+	•	Inputs: SILVER entities + DIM cells (no dependency on micro marts).
+MICRO (fine grid, deep scoring for shortlisted areas)
+	•	Built on H3 R10 (fine resolution).
+	•	Not computed for the whole country/region.
+	•	Generated only for selected macro candidates (e.g., top-ranked R7 cells).
+	•	Purpose: detailed scoring and local optimization inside shortlisted macro areas.
+	•	Inputs: SILVER entities + dim_h3_r10_cells, filtered by candidate set.
+Candidate-filtering rule (important)
+
+Micro-level marts must be restricted to a candidate set produced by macro (example: top-N per region, or score threshold).
+This prevents generating micro features for millions of cells unnecessarily.
 ---
 
 ## Requirements
