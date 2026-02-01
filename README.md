@@ -5,7 +5,7 @@ dbt project for the GEO pipeline (Databricks / Delta). Builds curated **SILVER**
 ---
 
 ## Architecture
-
+```bash
 - **(RAW / SOURCES)**: external/raw ingested tables (Delta / external locations / Unity Catalog)
 - **SILVER**: canonicalized / cleaned entities  
   (dedup, normalized types, consistent `region_code`, mandatory WKT debug fields, H3-ready attributes)
@@ -31,7 +31,7 @@ Candidate-filtering rule (important)
 Micro-level marts must be restricted to a candidate set produced by macro (example: top-N per region, or score threshold).
 This prevents generating micro features for millions of cells unnecessarily.
 ---
-
+```
 ## Requirements
 
 - dbt (Cloud or Core) with **Databricks adapter**
