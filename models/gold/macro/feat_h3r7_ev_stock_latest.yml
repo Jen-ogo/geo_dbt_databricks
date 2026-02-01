@@ -1,0 +1,170 @@
+version: 2
+
+models:
+  - name: feat_h3r7_ev_stock_latest
+    description: >
+      GOLD-level feature mart at H3 resolution 7 enriched with Eurostat EV stock metrics at NUTS2 level
+      (latest available year per NUTS2).
+      Project scope is derived idempotently via spatial join:
+      admin_areas (admin_level=4) -> GISCO NUTS (year=2024, scale=01m, crs=4326, level=2).
+      Each H3 cell is mapped by its cell center to a NUTS2 polygon and receives the corresponding latest-year
+      EV metrics (CAR, VG_LE3P5, BUS_MCO_TRO) in both NR and PC units.
+      Includes NUTS2 geometry and WKT debug column for QA.
+
+      Grain: (region_code, region, h3_r7).
+
+    tests:
+      - not_empty:
+          config: {name: feat_h3r7_ev_stock_latest__not_empty}
+      - rowcount_gt_0:
+          config: {name: feat_h3r7_ev_stock_latest__rowcount_gt_0}
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns: [region_code, region, h3_r7]
+          config: {name: feat_h3r7_ev_stock_latest__uk_region_region_h3}
+
+    columns:
+      - name: region_code
+        description: "Project region code (e.g., poland, germany)."
+        tests: [not_null]
+
+      - name: region
+        description: "Project region name (e.g., mazowieckie, nordrhein-westfalen)."
+        tests: [not_null]
+
+      - name: h3_r7
+        description: "H3 index at resolution 7; unique identifier of the analysis cell within region."
+        tests:
+          - not_null
+          - is_h3_hex:
+              arguments: {column_name: h3_r7}
+              config: {name: feat_h3r7_ev_stock_latest__h3_is_hex}
+
+      - name: cell_area_m2
+        description: "Area of the H3 R7 cell in square meters (from dim_h3_r7_cells)."
+        tests:
+          - not_null
+          - non_negative:
+              arguments: {column_name: cell_area_m2}
+              config: {name: feat_h3r7_ev_stock_latest__cell_area_non_negative}
+
+      - name: cell_wkt_4326
+        description: "WKT of the H3 R7 cell polygon in EPSG:4326 (debug/QA)."
+        tests:
+          - not_null
+          - wkt_not_empty:
+              arguments: {column_name: cell_wkt_4326}
+              config: {name: feat_h3r7_ev_stock_latest__cell_wkt_not_empty}
+          - wkt_prefix_any:
+              arguments:
+                column_name: cell_wkt_4326
+                prefixes: ['POLYGON', 'MULTIPOLYGON']
+              config: {name: feat_h3r7_ev_stock_latest__cell_wkt_prefix_polygonal}
+
+      - name: cell_center_wkt_4326
+        description: "WKT of the H3 R7 cell center point in EPSG:4326."
+        tests:
+          - not_null
+          - wkt_not_empty:
+              arguments: {column_name: cell_center_wkt_4326}
+              config: {name: feat_h3r7_ev_stock_latest__cell_center_wkt_not_empty}
+          - wkt_prefix_any:
+              arguments:
+                column_name: cell_center_wkt_4326
+                prefixes: ['POINT']
+              config: {name: feat_h3r7_ev_stock_latest__cell_center_wkt_prefix_point}
+
+      - name: cntr_code
+        description: "Country code from GISCO NUTS (e.g., DE, PL)."
+        tests: [not_null]
+
+      - name: nuts_id
+        description: "NUTS2 identifier (geo) used to join Eurostat metrics."
+        tests: [not_null]
+
+      - name: nuts_level
+        description: "NUTS level. Must be 2 (NUTS2)."
+        tests:
+          - not_null
+          - values_in_or_null:
+              arguments:
+                column_name: nuts_level
+                values: [2]
+              config: {name: feat_h3r7_ev_stock_latest__nuts_level_is_2}
+
+      - name: nuts_name
+        description: "NUTS2 name (name_latn) from GISCO."
+        tests: [not_null]
+
+      - name: nuts_geom
+        description: "NUTS2 geometry in EPSG:4326 (traceability/QA)."
+        tests: [not_null]
+
+      - name: nuts_wkt_4326
+        description: "WKT representation of NUTS2 geometry (debug/QA)."
+        tests:
+          - not_null
+          - wkt_not_empty:
+              arguments: {column_name: nuts_wkt_4326}
+              config: {name: feat_h3r7_ev_stock_latest__nuts_wkt_not_empty}
+          - wkt_prefix_any:
+              arguments:
+                column_name: nuts_wkt_4326
+                prefixes: ['POLYGON', 'MULTIPOLYGON']
+              config: {name: feat_h3r7_ev_stock_latest__nuts_wkt_prefix_polygonal}
+
+      - name: car_year_latest
+        description: "Latest available year in Eurostat for this NUTS2."
+        tests:
+          - not_null
+          - non_negative:
+              arguments: {column_name: car_year_latest}
+              config: {name: feat_h3r7_ev_stock_latest__year_non_negative}
+
+      - name: car_ev_nr_latest
+        description: "Eurostat EV stock: vehicle=CAR, unit=NR."
+        tests:
+          - not_null
+          - non_negative:
+              arguments: {column_name: car_ev_nr_latest}
+              config: {name: feat_h3r7_ev_stock_latest__car_nr_non_negative}
+
+      - name: car_ev_pc_latest
+        description: "Eurostat EV stock: vehicle=CAR, unit=PC."
+        tests:
+          - not_null
+          - non_negative:
+              arguments: {column_name: car_ev_pc_latest}
+              config: {name: feat_h3r7_ev_stock_latest__car_pc_non_negative}
+
+      - name: vg_le3p5_ev_nr_latest
+        description: "Eurostat EV stock: vehicle=VG_LE3P5, unit=NR."
+        tests:
+          - not_null
+          - non_negative:
+              arguments: {column_name: vg_le3p5_ev_nr_latest}
+              config: {name: feat_h3r7_ev_stock_latest__vg_nr_non_negative}
+
+      - name: vg_le3p5_ev_pc_latest
+        description: "Eurostat EV stock: vehicle=VG_LE3P5, unit=PC."
+        tests:
+          - not_null
+          - non_negative:
+              arguments: {column_name: vg_le3p5_ev_pc_latest}
+              config: {name: feat_h3r7_ev_stock_latest__vg_pc_non_negative}
+
+      - name: bus_ev_nr_latest
+        description: "Eurostat EV stock: vehicle=BUS_MCO_TRO, unit=NR."
+        tests:
+          - not_null
+          - non_negative:
+              arguments: {column_name: bus_ev_nr_latest}
+              config: {name: feat_h3r7_ev_stock_latest__bus_nr_non_negative}
+
+      - name: bus_ev_pc_latest
+        description: "Eurostat EV stock: vehicle=BUS_MCO_TRO, unit=PC."
+        tests:
+          - not_null
+          - non_negative:
+              arguments: {column_name: bus_ev_pc_latest}
+              config: {name: feat_h3r7_ev_stock_latest__bus_pc_non_negative}

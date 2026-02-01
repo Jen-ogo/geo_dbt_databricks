@@ -9,7 +9,7 @@ with pop as (
   select
     cast(region_code as string) as region_code,
     cast(region      as string) as region,
-    cast(h3_r10       as string) as h3_r10,
+    cast(h3_r7       as string) as h3_r7,
 
     cast(cell_area_m2 as double)         as cell_area_m2,
     cast(cell_wkt_4326 as string)        as cell_wkt_4326,
@@ -17,16 +17,16 @@ with pop as (
 
     cast(pop_total as double) as pop_total,
     cast(last_load_ts as timestamp) as pop_last_load_ts
-  from {{ ref('feat_h3_pop_r10') }}
+  from {{ ref('feat_h3_pop_r7') }}
   where region_code is not null
     and region      is not null
-    and h3_r10      is not null
+    and h3_r7       is not null
 ),
 
 ch_src as (
   select
     cast(region_code as string) as region_code,
-    cast({{ h3_r10_from_geom_point("st_geomfromwkt(geom_wkt_4326)") }} as string) as h3_r10,
+    cast({{ h3_r7_from_geom_point("st_geomfromwkt(geom_wkt_4326)") }} as string) as h3_r7,
 
     cast(total_sockets_cnt as int) as total_sockets_cnt,
     cast(has_dc as boolean) as has_dc,
@@ -40,7 +40,7 @@ ch_src as (
 ch_agg as (
   select
     region_code,
-    h3_r10,
+    h3_r7,
 
     count(*) as chargers_cnt,
     sum(coalesce(total_sockets_cnt, 0)) as sockets_cnt_sum,
@@ -49,14 +49,14 @@ ch_agg as (
 
     max(load_ts) as chargers_last_load_ts
   from ch_src
-  where h3_r10 is not null
+  where h3_r7 is not null
   group by 1,2
 )
 
 select
   p.region_code,
   p.region,
-  p.h3_r10,
+  p.h3_r7,
 
   p.cell_area_m2,
   p.cell_wkt_4326,
@@ -84,9 +84,9 @@ select
   coalesce(c.sockets_cnt_sum, 0) / nullif(p.cell_area_m2 / 1e6, 0.0) as sockets_per_km2,
 
   /* recency */
-  coalesce(greatest(c.chargers_last_load_ts, p.pop_last_load_ts)) as last_load_ts
+  greatest(c.chargers_last_load_ts, p.pop_last_load_ts) as last_load_ts
 
 from pop p
 left join ch_agg c
   on c.region_code = p.region_code
- and c.h3_r10      = p.h3_r10
+ and c.h3_r7       = p.h3_r7

@@ -1,0 +1,171 @@
+version: 2
+
+models:
+  - name: feat_h3_poi_areas_r7_xarea_classbuckets
+    description: >
+      GOLD (Databricks) — sparse H3 r7 POI areas feature mart using centroid assignment + exact intersection area (XAREA).
+      Source:
+      - SILVER.POI_AREAS (geom, centroid_geom, feature_id, poi_class, poi_type, region_code, region, load_ts)
+      - SILVER.DIM_H3_R7_CELLS (cell_geom, cell_area_m2, cell_wkt_4326, cell_center_wkt_4326)
+
+      Method:
+      - Candidate cell: polygon centroid -> H3 r7 (via project helper macro).
+      - Exact covered area: intersection(poi_geom, cell_geom) -> area_m2() in EPSG:3035.
+      - Aggregation: totals + 8 fixed poi_class buckets (counts + xarea sums + shares).
+
+      Grain:
+      - (region_code, region, h3_r7) — only covered cells (sparse).
+      Tagged as `heavy`.
+
+    tests:
+      - rowcount_gt_0:
+          config:
+            name: feat_h3_poi_areas_r7_xarea_classbuckets__rowcount_gt_0
+
+      - dbt_utils.unique_combination_of_columns:
+          combination_of_columns: [region_code, region, h3_r7]
+          config:
+            name: feat_h3_poi_areas_r7_xarea_classbuckets__uk_region_region_h3
+
+    columns:
+      - name: region_code
+        tests: [not_null]
+
+      - name: region
+        tests: [not_null]
+
+      - name: h3_r7
+        tests:
+          - not_null
+          - is_h3_hex:
+              arguments:
+                column_name: h3_r7
+              config:
+                name: feat_h3_poi_areas_r7_xarea_classbuckets__h3_r7_is_hex
+
+      - name: cell_area_m2
+        tests:
+          - not_null
+          - non_negative:
+              arguments:
+                column_name: cell_area_m2
+              config:
+                name: feat_h3_poi_areas_r7_xarea_classbuckets__cell_area_m2_non_negative
+
+      - name: cell_wkt_4326
+        tests:
+          - not_null
+          - wkt_not_empty:
+              arguments:
+                column_name: cell_wkt_4326
+              config:
+                name: feat_h3_poi_areas_r7_xarea_classbuckets__cell_wkt_not_empty
+          - wkt_prefix_any:
+              arguments:
+                column_name: cell_wkt_4326
+                prefixes: ["POLYGON", "MULTIPOLYGON"]
+              config:
+                name: feat_h3_poi_areas_r7_xarea_classbuckets__cell_wkt_prefix_polygon
+
+      - name: cell_center_wkt_4326
+        tests:
+          - not_null
+          - wkt_not_empty:
+              arguments:
+                column_name: cell_center_wkt_4326
+              config:
+                name: feat_h3_poi_areas_r7_xarea_classbuckets__cell_center_wkt_not_empty
+          - wkt_prefix_any:
+              arguments:
+                column_name: cell_center_wkt_4326
+                prefixes: ["POINT"]
+              config:
+                name: feat_h3_poi_areas_r7_xarea_classbuckets__cell_center_wkt_prefix_point
+
+      - name: has_poi_areas
+        tests: [not_null]
+
+      - name: poi_areas_cnt
+        tests:
+          - not_null
+          - non_negative:
+              arguments:
+                column_name: poi_areas_cnt
+              config:
+                name: feat_h3_poi_areas_r7_xarea_classbuckets__poi_areas_cnt_non_negative
+
+      - name: poi_xarea_m2_sum
+        tests:
+          - non_negative:
+              arguments:
+                column_name: poi_xarea_m2_sum
+              config:
+                name: feat_h3_poi_areas_r7_xarea_classbuckets__poi_xarea_m2_sum_non_negative
+
+      - name: poi_xarea_share
+        description: "poi_xarea_m2_sum / cell_area_m2 (may exceed 1 if overlaps)."
+        tests:
+          - non_negative:
+              arguments:
+                column_name: poi_xarea_share
+              config:
+                name: feat_h3_poi_areas_r7_xarea_classbuckets__poi_xarea_share_non_negative
+          - num_between_or_null:
+              arguments:
+                column_name: poi_xarea_share
+                min_value: 0
+                max_value: 1
+              config:
+                name: feat_h3_poi_areas_r7_xarea_classbuckets__poi_xarea_share_0_1_warn
+                severity: warn
+
+      - name: last_load_ts
+        tests: [not_null]
+
+  - name: feat_h3_poi_areas_r7_xarea_classbuckets_dense
+    description: >
+      GOLD (Databricks) — dense version of feat_h3_poi_areas_r7_xarea_classbuckets.
+      Emits one row per (region_code, region, h3_r7) from DIM_H3_R7_CELLS,
+      left joining sparse features and filling zeros. last_load_ts is NULL for empty cells.
+      Tagged as `heavy` (depends on sparse heavy model).
+
+    tests:
+      - rowcount_gt_0:
+          config:
+            name: feat_h3_poi_areas_r7_xarea_classbuckets_dense__rowcount_gt_0
+
+      - dbt_utils.unique_combination_of_columns:
+          combination_of_columns: [region_code, region, h3_r7]
+          config:
+            name: feat_h3_poi_areas_r7_xarea_classbuckets_dense__uk_region_region_h3
+
+    columns:
+      - name: region_code
+        tests: [not_null]
+
+      - name: region
+        tests: [not_null]
+
+      - name: h3_r7
+        tests:
+          - not_null
+          - is_h3_hex:
+              arguments:
+                column_name: h3_r7
+              config:
+                name: feat_h3_poi_areas_r7_xarea_classbuckets_dense__h3_r7_is_hex
+
+      - name: has_poi_areas
+        tests: [not_null]
+
+      - name: poi_areas_cnt
+        tests:
+          - not_null
+          - non_negative:
+              arguments:
+                column_name: poi_areas_cnt
+              config:
+                name: feat_h3_poi_areas_r7_xarea_classbuckets_dense__poi_areas_cnt_non_negative
+
+      - name: last_load_ts
+        description: "Nullable for empty cells."

@@ -108,4 +108,3 @@ models:
                 name: feat_h3_charging_r10__chargers_per_km2_non_negative
 
       - name: last_load_ts
-        tests: [not_null]

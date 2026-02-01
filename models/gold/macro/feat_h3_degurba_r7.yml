@@ -1,0 +1,101 @@
+version: 2
+
+models:
+  - name: feat_h3_degurba_r7
+    description: >
+      GOLD.FEAT_H3_DEGURBA_R7 — DEGURBA attribution on H3 R7 cells (dense, DIM-driven).
+      Built directly in GOLD (no intermediate SILVER feature mart):
+      - DIM provides full H3 grid and debug geometry.
+      - LAU_DEGURBA provides polygons with degurba + year.
+      - Assign by: ST_CONTAINS(lau_geom, cell_center_geom).
+      - If multiple LAUs match a cell, choose latest by (year desc, load_ts desc).
+
+      Grain: (region_code, h3_r7). H3 is canonical STRING.
+
+    tests:
+      - rowcount_gt_0:
+          config: {name: feat_h3_degurba_r7__rowcount_gt_0}
+
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns: [region_code, h3_r7]
+          config: {name: feat_h3_degurba_r7__uk_region_h3}
+
+    columns:
+      - name: region_code
+        tests: [not_null]
+
+      - name: h3_r7
+        tests:
+          - not_null
+          - is_h3_hex:
+              arguments: {column_name: h3_r7}
+              config: {name: feat_h3_degurba_r7__h3_is_hex}
+
+      - name: cell_area_m2
+        tests:
+          - not_null
+          - non_negative:
+              arguments: {column_name: cell_area_m2}
+              config: {name: feat_h3_degurba_r7__cell_area_non_negative}
+
+      - name: cell_wkt_4326
+        tests:
+          - not_null
+          - wkt_not_empty:
+              arguments: {column_name: cell_wkt_4326}
+              config: {name: feat_h3_degurba_r7__cell_wkt_not_empty}
+          - wkt_prefix_any:
+              arguments:
+                column_name: cell_wkt_4326
+                prefixes: ["POLYGON", "MULTIPOLYGON"]
+              config: {name: feat_h3_degurba_r7__cell_wkt_prefix_polygonal}
+
+      - name: cell_center_wkt_4326
+        tests:
+          - not_null
+          - wkt_not_empty:
+              arguments: {column_name: cell_center_wkt_4326}
+              config: {name: feat_h3_degurba_r7__center_wkt_not_empty}
+          - wkt_prefix_any:
+              arguments:
+                column_name: cell_center_wkt_4326
+                prefixes: ["POINT"]
+              config: {name: feat_h3_degurba_r7__center_wkt_prefix_point}
+
+      - name: year
+        description: "Latest available year chosen per (region_code, h3_r7). Nullable if no match."
+      - name: lau_id
+        description: "LAU id for matched polygon. Nullable if no match."
+      - name: lau_name
+        description: "LAU name for matched polygon. Nullable if no match."
+
+      - name: degurba
+        description: "DEGURBA class (1=city, 2=towns/suburbs, 3=rural). Nullable if no match."
+        tests:
+          - values_in_or_null:
+              arguments:
+                column_name: degurba
+                values: [1, 2, 3]
+              config: {name: feat_h3_degurba_r7__degurba_allowed_1_2_3_or_null}
+
+      - name: degurba_1_city
+        tests:
+          - values_in_or_null:
+              arguments: {column_name: degurba_1_city, values: [0, 1]}
+              config: {name: feat_h3_degurba_r7__degurba_1_0_1}
+
+      - name: degurba_2_towns_suburbs
+        tests:
+          - values_in_or_null:
+              arguments: {column_name: degurba_2_towns_suburbs, values: [0, 1]}
+              config: {name: feat_h3_degurba_r7__degurba_2_0_1}
+
+      - name: degurba_3_rural
+        tests:
+          - values_in_or_null:
+              arguments: {column_name: degurba_3_rural, values: [0, 1]}
+              config: {name: feat_h3_degurba_r7__degurba_3_0_1}
+
+      - name: last_load_ts
+        description: "Latest load_ts among LAU_DEGURBA matches used for the chosen record. Nullable if no match."
