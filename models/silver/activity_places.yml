@@ -3,38 +3,36 @@ version: 2
 models:
   - name: activity_places
     description: >
-      OSM buildings_activity cleaned to "places" (non-residential-ish), deduplicated by feature_id.
-      Databricks Silver. Geometry: geom (SRID=4326) + geom_wkt_4326 (mandatory debug).
-      Grain: 1 row per feature_id, latest by (load_ts desc, source_file desc).
+      SILVER cleaned OSM buildings_activity to "places".
+      Dedup grain: (region_code, region, feature_id).
+      Geometry: geom (SRID=4326) + geom_wkt_4326 (mandatory debug).
+      No H3 here by design (H3 is computed in GOLD).
 
     tests:
       - rowcount_gt_0:
           config:
             name: activity_places__rowcount_gt_0
-
+      - not_empty:
+          config:
+            name: activity_places__not_empty
       - osm_id_or_way_id_present:
           config:
             name: activity_places__osm_id_or_way_id_present
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns: [region_code, region, feature_id]
+          config:
+            name: activity_places__uk_region_region_feature
 
     columns:
+      - name: region_code
+        tests: [not_null]
+      - name: region
+        tests: [not_null]
       - name: feature_id
-        description: "Stable key: 'N<osm_id>' or 'W<osm_way_id>'. Dedup key."
-        tests: [not_null, unique]
-
-      - name: osm_id
-        description: "OSM node id (nullable for ways)."
-
-      - name: osm_way_id
-        description: "OSM way id (nullable for nodes)."
-
-      - name: name
-        description: "OSM name tag (nullable)."
-
-      - name: name_en
-        description: "OSM name:en parsed from tags (nullable)."
+        tests: [not_null]
 
       - name: activity_class
-        description: "High-level bucket: amenity/shop/office/tourism/leisure/sport/craft/building."
         tests:
           - not_null
           - values_in_or_null:
@@ -45,11 +43,9 @@ models:
                 name: activity_places__activity_class_allowlist
 
       - name: activity_type_lc
-        description: "Lowercased activity type from the first non-null of tag families."
         tests: [not_null]
 
       - name: building_levels
-        description: "Parsed building:levels (nullable, tolerant parsing)."
         tests:
           - non_negative:
               arguments:
@@ -57,18 +53,7 @@ models:
               config:
                 name: activity_places__building_levels_non_negative
 
-      - name: operator_name
-        description: "operator/network/brand (nullable)."
-
-      - name: opening_hours
-        description: "opening_hours tag (nullable)."
-
-      - name: geom
-        description: "Geometry as GEOMETRY, SRID=4326."
-        tests: [not_null]
-
       - name: geom_wkt_4326
-        description: "Mandatory debug WKT derived from geom."
         tests:
           - not_null
           - wkt_not_empty:
@@ -79,22 +64,11 @@ models:
           - wkt_prefix_any:
               arguments:
                 column_name: geom_wkt_4326
-                prefixes: ["POLYGON(", "MULTIPOLYGON(", "POINT(", "LINESTRING("]
+                prefixes: ["POLYGON", "MULTIPOLYGON", "POINT", "LINESTRING"]
               config:
                 name: activity_places__geom_wkt_prefix_any_geo
 
-      - name: region_code
-        description: "Canonical region/country code from ingest: lower(country)."
-        tests: [not_null]
-
-      - name: region
-        description: "Region label from ingest partitioning."
-        tests: [not_null]
-
       - name: source_file
-        description: "Lineage + dedup tie-break."
         tests: [not_null]
-
       - name: load_ts
-        description: "Load timestamp used for dedup ordering."
         tests: [not_null]

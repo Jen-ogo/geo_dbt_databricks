@@ -1,0 +1,43 @@
+version: 2
+
+models:
+  - name: feat_h3_buildings_r7
+    tests:
+      - rowcount_gt_0
+      - not_empty
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns: [region_code, region, h3_r7]
+
+    columns:
+      - name: region_code
+        tests: [not_null]
+      - name: region
+        tests: [not_null]
+      - name: h3_r7
+        tests:
+          - not_null
+          - is_h3_hex:
+              arguments:
+                column_name: h3_r7
+
+      - name: cell_area_m2
+        tests:
+          - not_null
+          - non_negative:
+              arguments:
+                column_name: cell_area_m2
+
+      - name: buildings_cnt
+        tests:
+          - not_null
+          - non_negative:
+              arguments:
+                column_name: buildings_cnt
+
+      - name: building_method
+        tests:
+          - values_in_or_null:
+              arguments:
+                column_name: building_method
+                values: ["activity_places_to_h3_r7"]

@@ -15,7 +15,7 @@ with pop as (
 
     cast(pop_total as double) as pop_total,
     cast(last_load_ts as timestamp) as last_load_ts
-  from {{ ref('feat_h3_pop_r10_final') }}
+  from {{ ref('feat_h3_pop_r10') }}
   where region_code is not null
     and h3_r10 is not null
 ),

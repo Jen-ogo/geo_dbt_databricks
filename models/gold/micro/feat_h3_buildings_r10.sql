@@ -4,97 +4,118 @@
     partition_by=['region_code','region']
 ) }}
 
-WITH b AS (
-  SELECT
-    CAST(region_code AS STRING) AS region_code,
-    CAST(region  AS STRING) AS region,
-
-    CAST(h3_r10 AS STRING)  AS h3_r10,
-
-    LOWER(CAST(building_type AS STRING))      AS building_type,
-    COALESCE(CAST(building_levels AS INT), 1) AS building_levels,
-
-
-    COALESCE(
-      geom,
-      ST_SetSRID(ST_GeomFromWKT(geom_wkt_4326), 4326)
-    ) AS geom_4326,
-
-    CAST(load_ts AS TIMESTAMP) AS load_ts
-  FROM {{ ref('building_footprints_model') }}
-  WHERE h3_r10 IS NOT NULL
-    AND (geom IS NOT NULL OR geom_wkt_4326 IS NOT NULL)
-),
-
-
-cell AS (
-  SELECT
+with ap as (
+  select
     region_code,
     region,
-    h3_r10,
-    cell_area_m2,
-    cell_wkt_4326,
-    cell_center_wkt_4326
-  FROM {{ ref('dim_h3_r10_cells') }}
+    feature_id,
+    activity_class,
+    activity_type_lc as building_type,
+    coalesce(cast(building_levels as int), 1) as building_levels,
+    geom,
+    geom_wkt_4326,
+    load_ts
+  from {{ ref('activity_places') }}
+  where activity_class = 'building'
+    and geom is not null
 ),
 
-b2 AS (
-  SELECT
+-- footprints_model filter (твоя логика)
+ap_model as (
+  select *
+  from ap
+  where lower(building_type) not in (
+    'yes',
+    'outbuilding','farm_auxiliary','shed','barn','sty','stable',
+    'garage','garages','roof','greenhouse',
+    'allotment_house',
+    'hut','cabin'
+  )
+),
+
+footprints as (
+  select
+    region_code,
+    region,
+    feature_id,
+    lower(building_type) as building_type,
+    building_levels,
+    geom as geom_4326,
+    load_ts,
+
+    st_centroid(geom) as centroid_geom,
+    {{ h3_r10_from_geog_point('st_centroid(geom)') }} as h3_r10,
+
+    cast(st_area(st_transform(geom, 3035)) as double) as footprint_area_m2
+  from ap_model
+  -- только полигоны
+  where geom_wkt_4326 is not null
+    and (
+      upper(substr(geom_wkt_4326, 1, 7)) = 'POLYGON'
+      or upper(substr(geom_wkt_4326, 1, 12)) = 'MULTIPOLYGON'
+    )
+),
+
+b2 as (
+  select
     region_code,
     region,
     h3_r10,
     building_levels,
-
-
-    CAST(ST_Area(ST_Transform(geom_4326, 3035)) AS DOUBLE) AS footprint_area_m2,
-
-    CASE
-      WHEN building_type IN (
+    footprint_area_m2,
+    case
+      when building_type in (
         'house','detached','apartments','residential','semidetached_house','terrace',
         'bungalow','dormitory'
-      ) THEN 'residential'
-
-      WHEN building_type IN (
+      ) then 'residential'
+      when building_type in (
         'retail','commercial','office','industrial','manufacture','warehouse','service',
         'school','kindergarten','university','hospital','fire_station','government',
         'supermarket','hotel','train_station','church','chapel'
-      ) THEN 'nonresidential'
-
-      WHEN building_type = 'yes' THEN 'unknown'
-      ELSE 'other'
-    END AS building_group,
-
+      ) then 'nonresidential'
+      when building_type = 'yes' then 'unknown'
+      else 'other'
+    end as building_group,
     load_ts
-  FROM b
-  WHERE geom_4326 IS NOT NULL
+  from footprints
+  where h3_r10 is not null
 ),
 
-agg AS (
-  SELECT
+agg as (
+  select
     region_code,
     region,
     h3_r10,
 
-    COUNT(1) AS buildings_cnt,
-    SUM(CASE WHEN building_group = 'residential'    THEN 1 ELSE 0 END) AS res_buildings_cnt,
-    SUM(CASE WHEN building_group = 'nonresidential' THEN 1 ELSE 0 END) AS nonres_buildings_cnt,
-    SUM(CASE WHEN building_group = 'unknown'        THEN 1 ELSE 0 END) AS unknown_buildings_cnt,
+    count(1) as buildings_cnt,
+    sum(case when building_group='residential' then 1 else 0 end) as res_buildings_cnt,
+    sum(case when building_group='nonresidential' then 1 else 0 end) as nonres_buildings_cnt,
+    sum(case when building_group='unknown' then 1 else 0 end) as unknown_buildings_cnt,
 
-    SUM(footprint_area_m2) AS footprint_area_m2_sum,
-    SUM(footprint_area_m2 * CAST(building_levels AS DOUBLE)) AS floor_area_m2_est_sum,
+    sum(footprint_area_m2) as footprint_area_m2_sum,
+    sum(footprint_area_m2 * cast(building_levels as double)) as floor_area_m2_est_sum,
 
-    AVG(CAST(building_levels AS DOUBLE)) AS levels_avg,
-    percentile_approx(building_levels, 0.5) AS levels_p50,
+    avg(cast(building_levels as double)) as levels_avg,
+    percentile_approx(building_levels, 0.5) as levels_p50,
 
-    percentile_approx(footprint_area_m2, 0.5) AS footprint_area_p50_m2,
-    percentile_approx(footprint_area_m2, 0.9) AS footprint_area_p90_m2,
+    percentile_approx(footprint_area_m2, 0.5) as footprint_area_p50_m2,
+    percentile_approx(footprint_area_m2, 0.9) as footprint_area_p90_m2,
 
-    MAX(load_ts) AS last_load_ts
-  FROM b2
-  GROUP BY 1,2,3
+    max(load_ts) as last_load_ts
+  from b2
+  group by 1,2,3
+),
+
+cell as (
+  select
+    region_code, region, h3_r10,
+    cell_area_m2,
+    cell_wkt_4326,
+    cell_center_wkt_4326
+  from {{ ref('dim_h3_r10_cells') }}
 )
 
-SELECT
+select
   c.region_code,
   c.region,
   c.h3_r10,
@@ -116,17 +137,15 @@ SELECT
   a.footprint_area_p50_m2,
   a.footprint_area_p90_m2,
 
-  /* densities per km2 */
-  CAST(a.buildings_cnt AS DOUBLE) / NULLIF(c.cell_area_m2 / 1e6, 0)         AS buildings_per_km2,
-  a.footprint_area_m2_sum          / NULLIF(c.cell_area_m2 / 1e6, 0)         AS footprint_m2_per_km2,
-  a.floor_area_m2_est_sum          / NULLIF(c.cell_area_m2 / 1e6, 0)         AS floor_area_m2_per_km2,
+  cast(a.buildings_cnt as double) / nullif(c.cell_area_m2 / 1e6, 0) as buildings_per_km2,
+  a.footprint_area_m2_sum / nullif(c.cell_area_m2 / 1e6, 0)         as footprint_m2_per_km2,
+  a.floor_area_m2_est_sum / nullif(c.cell_area_m2 / 1e6, 0)         as floor_area_m2_per_km2,
 
-  /* built-up share */
-  a.footprint_area_m2_sum          / NULLIF(c.cell_area_m2, 0)               AS built_up_share,
+  a.footprint_area_m2_sum / nullif(c.cell_area_m2, 0)               as built_up_share,
+
+  cast('activity_places_polygon_centroid' as string) as building_method,
 
   a.last_load_ts
-FROM agg a
-JOIN cell c
-  ON c.region_code = a.region_code
- AND c.region      = a.region
- AND c.h3_r10       = a.h3_r10
+from agg a
+join cell c
+  on c.region_code=a.region_code and c.region=a.region and c.h3_r10=a.h3_r10

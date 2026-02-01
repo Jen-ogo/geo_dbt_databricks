@@ -1,0 +1,135 @@
+version: 2
+
+models:
+  - name: feat_h3_roads_r7
+    description: >
+      GOLD roads features on H3 R7 built directly from SILVER.ROAD_SEGMENTS + SILVER.DIM_H3_R7_CELLS.
+      No rollup from R10. Grain: (region_code, region, h3_r7).
+    tests:
+      - rowcount_gt_0
+      - not_empty
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns: [region_code, region, h3_r7]
+          config:
+            name: feat_h3_roads_r7__uk
+
+      - num_between_or_null:
+          arguments:
+            column_name: oneway_share
+            min_value: 0
+            max_value: 1
+          config:
+            name: feat_h3_roads_r7__oneway_share_0_1_warn
+            severity: warn
+
+    columns:
+      - name: region_code
+        tests: [not_null]
+      - name: region
+        tests: [not_null]
+
+      - name: h3_r7
+        tests:
+          - not_null
+          - is_h3_hex:
+              arguments:
+                column_name: h3_r7
+              config:
+                name: feat_h3_roads_r7__h3_is_hex
+
+      - name: cell_area_m2
+        tests:
+          - not_null
+          - non_negative:
+              arguments:
+                column_name: cell_area_m2
+
+      - name: cell_wkt_4326
+        tests:
+          - not_null
+          - wkt_not_empty:
+              arguments:
+                column_name: cell_wkt_4326
+          - wkt_prefix_any:
+              arguments:
+                column_name: cell_wkt_4326
+                prefixes: ["POLYGON", "MULTIPOLYGON"]
+
+      - name: cell_center_wkt_4326
+        tests:
+          - not_null
+          - wkt_not_empty:
+              arguments:
+                column_name: cell_center_wkt_4326
+          - wkt_prefix_any:
+              arguments:
+                column_name: cell_center_wkt_4326
+                prefixes: ["POINT"]
+
+      - name: roads_len_m_sum
+        tests:
+          - non_negative:
+              arguments:
+                column_name: roads_len_m_sum
+
+      - name: roads_major_len_m_sum
+        tests:
+          - non_negative:
+              arguments:
+                column_name: roads_major_len_m_sum
+
+      - name: road_segments_cnt
+        tests:
+          - non_negative:
+              arguments:
+                column_name: road_segments_cnt
+
+      - name: maxspeed_avg_kph
+        tests:
+          - non_negative:
+              arguments:
+                column_name: maxspeed_avg_kph
+
+      - name: maxspeed_p50_kph
+        tests:
+          - non_negative:
+              arguments:
+                column_name: maxspeed_p50_kph
+
+      - name: lanes_avg
+        tests:
+          - non_negative:
+              arguments:
+                column_name: lanes_avg
+
+      - name: lanes_p50
+        tests:
+          - non_negative:
+              arguments:
+                column_name: lanes_p50
+
+      - name: road_segments_per_km2
+        tests:
+          - non_negative:
+              arguments:
+                column_name: road_segments_per_km2
+
+      - name: roads_len_m_per_km2
+        tests:
+          - non_negative:
+              arguments:
+                column_name: roads_len_m_per_km2
+
+      - name: roads_major_len_m_per_km2
+        tests:
+          - non_negative:
+              arguments:
+                column_name: roads_major_len_m_per_km2
+
+      - name: road_method
+        tests:
+          - values_in_or_null:
+              arguments:
+                column_name: road_method
+                values: ["road_segments_to_h3_r7"]
