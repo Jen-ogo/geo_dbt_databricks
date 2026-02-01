@@ -10,25 +10,24 @@ with admin4 as (
     and geom is not null
 ),
 
--- H3 R7 polygons (нужна геометрия полигона)
 h3 as (
   select
     region_code,
     region,
-    h3_r7,
+    h3_r10,
     cell_wkt_4326,
     cell_center_wkt_4326,
     cell_area_m2,
-    st_setsrid(st_geomfromwkt(cell_wkt_4326), 4326) as cell_geom
-  from {{ ref('dim_h3_r7_cells') }}
-  where cell_wkt_4326 is not null
-),
 
--- grid scoped by admin4 boundaries (как ты уже доказал быстро работает)
+    st_geomfromwkt(cell_center_wkt_4326) as cell_center_geom
+  from {{ ref('dim_h3_r10_cells') }}
+  where cell_center_wkt_4326 is not null
+),
 grid_scoped as (
   select
     a.region_code,
     a.region,
+
     cast(g.grd_id as string) as grid_id,
 
     {{ nullif_neg9999('cast(g.t as double)') }}       as pop_total,
@@ -46,11 +45,10 @@ grid_scoped as (
     {{ nullif_neg9999('cast(g.chg_in as double)') }}  as chg_in,
     {{ nullif_neg9999('cast(g.chg_out as double)') }} as chg_out,
 
-    cast(g.land_surface as double)                      as land_surface,
+    cast(g.land_surface as double)                    as land_surface,
     {{ nullif_neg9999('cast(g.populated as double)') }} as populated,
 
-    st_setsrid(g.geom, 4326) as cell_geom,
-    st_setsrid(st_centroid(g.geom), 4326) as cell_centroid,
+    g.geom as cell_geom,
     cast(g.load_ts as timestamp) as load_ts
   from {{ ref('census_grid_2021_europe') }} g
   join admin4 a
@@ -67,13 +65,11 @@ grid_scoped_dedup as (
     order by load_ts desc, grid_id
   ) = 1
 ),
-
-grid_to_h3 as (
+h3_grid as (
   select
     h.region_code,
     h.region,
-    h.h3_r7,
-
+    h.h3_r10,
     g.grid_id,
 
     g.pop_total,
@@ -84,55 +80,94 @@ grid_to_h3 as (
     g.pop_age_ge65,
     g.emp_total,
 
-    g.nat, g.eu_oth, g.oth, g.same, g.chg_in, g.chg_out,
+    g.nat,
+    g.eu_oth,
+    g.oth,
+    g.same,
+    g.chg_in,
+    g.chg_out,
+
     g.land_surface,
     g.populated,
 
     g.load_ts
   from h3 h
-  join grid_scoped_dedup g
+  left join grid_scoped_dedup g
     on h.region_code = g.region_code
    and h.region      = g.region
-   and st_contains(h.cell_geom, g.cell_centroid)
+   and st_contains(g.cell_geom, h.cell_center_geom)
 ),
-
-agg as (
+grid_cnt as (
   select
     region_code,
     region,
-    h3_r7,
-
-    sum(pop_total)    as pop_total,
-    sum(pop_male)     as pop_male,
-    sum(pop_female)   as pop_female,
-    sum(pop_age_lt15) as pop_age_lt15,
-    sum(pop_age_1564) as pop_age_1564,
-    sum(pop_age_ge65) as pop_age_ge65,
-    sum(emp_total)    as emp_total,
-
-    sum(nat)     as nat,
-    sum(eu_oth)  as eu_oth,
-    sum(oth)     as oth,
-    sum(same)    as same,
-    sum(chg_in)  as chg_in,
-    sum(chg_out) as chg_out,
-
-    max(land_surface) as land_surface,  -- если нужно иначе — скажешь
-    max(populated)    as populated,
-
-    count(*) as grid_cells_cnt,
-    max(load_ts) as last_load_ts
-  from grid_to_h3
+    grid_id,
+    count(*) as h3_cnt_in_grid
+  from h3_grid
+  where grid_id is not null
   group by 1,2,3
+),
+
+alloc as (
+  select
+    hg.region_code,
+    hg.region,
+    hg.h3_r10,
+    hg.grid_id,
+    gc.h3_cnt_in_grid,
+
+    hg.pop_total    / nullif(cast(gc.h3_cnt_in_grid as double), 0.0) as pop_total,
+    hg.pop_male     / nullif(cast(gc.h3_cnt_in_grid as double), 0.0) as pop_male,
+    hg.pop_female   / nullif(cast(gc.h3_cnt_in_grid as double), 0.0) as pop_female,
+    hg.pop_age_lt15 / nullif(cast(gc.h3_cnt_in_grid as double), 0.0) as pop_age_lt15,
+    hg.pop_age_1564 / nullif(cast(gc.h3_cnt_in_grid as double), 0.0) as pop_age_1564,
+    hg.pop_age_ge65 / nullif(cast(gc.h3_cnt_in_grid as double), 0.0) as pop_age_ge65,
+    hg.emp_total    / nullif(cast(gc.h3_cnt_in_grid as double), 0.0) as emp_total,
+
+    hg.nat     / nullif(cast(gc.h3_cnt_in_grid as double), 0.0) as nat,
+    hg.eu_oth  / nullif(cast(gc.h3_cnt_in_grid as double), 0.0) as eu_oth,
+    hg.oth     / nullif(cast(gc.h3_cnt_in_grid as double), 0.0) as oth,
+    hg.same    / nullif(cast(gc.h3_cnt_in_grid as double), 0.0) as same,
+    hg.chg_in  / nullif(cast(gc.h3_cnt_in_grid as double), 0.0) as chg_in,
+    hg.chg_out / nullif(cast(gc.h3_cnt_in_grid as double), 0.0) as chg_out,
+
+    hg.land_surface,
+    hg.populated,
+
+    case when (hg.pop_total / nullif(cast(gc.h3_cnt_in_grid as double), 0.0)) > 0
+      then (hg.pop_age_ge65 / nullif(cast(gc.h3_cnt_in_grid as double), 0.0))
+         / (hg.pop_total    / nullif(cast(gc.h3_cnt_in_grid as double), 0.0))
+    end as share_age_ge65,
+
+    case when (hg.pop_total / nullif(cast(gc.h3_cnt_in_grid as double), 0.0)) > 0
+      then (hg.pop_age_lt15 / nullif(cast(gc.h3_cnt_in_grid as double), 0.0))
+         / (hg.pop_total    / nullif(cast(gc.h3_cnt_in_grid as double), 0.0))
+    end as share_age_lt15,
+
+    case when (hg.pop_total / nullif(cast(gc.h3_cnt_in_grid as double), 0.0)) > 0
+      then (hg.emp_total / nullif(cast(gc.h3_cnt_in_grid as double), 0.0))
+         / (hg.pop_total / nullif(cast(gc.h3_cnt_in_grid as double), 0.0))
+    end as share_emp,
+
+    case when hg.grid_id is not null then 1 end as grid_cells_cnt,
+    hg.load_ts as last_load_ts
+  from h3_grid hg
+  left join grid_cnt gc
+    on gc.region_code = hg.region_code
+   and gc.region      = hg.region
+   and gc.grid_id     = hg.grid_id
 )
 
 select
   a.region_code,
   a.region,
-  a.h3_r7,
+  a.h3_r10,
   c.cell_area_m2,
   c.cell_wkt_4326,
   c.cell_center_wkt_4326,
+
+  a.grid_id,
+  a.h3_cnt_in_grid,
 
   a.pop_total, a.pop_male, a.pop_female,
   a.pop_age_lt15, a.pop_age_1564, a.pop_age_ge65,
@@ -142,14 +177,12 @@ select
   a.land_surface,
   a.populated,
 
-  case when a.pop_total > 0 then a.pop_age_ge65 / a.pop_total end as share_age_ge65,
-  case when a.pop_total > 0 then a.pop_age_lt15 / a.pop_total end as share_age_lt15,
-  case when a.pop_total > 0 then a.emp_total    / a.pop_total end as share_emp,
+  a.share_age_ge65, a.share_age_lt15, a.share_emp,
 
   a.grid_cells_cnt,
   cast(a.grid_cells_cnt * 1000000 as double) as support_area_m2,
 
-  cast('census_grid_1km_to_h3_centroid_agg' as string) as pop_method,
+  cast('census_grid_1km_to_h3_allocated' as string) as pop_method,
 
   a.pop_total / nullif(cast(a.grid_cells_cnt as double), 0.0) as pop_per_km2_support,
   a.emp_total / nullif(cast(a.grid_cells_cnt as double), 0.0) as emp_per_km2_support,
@@ -158,8 +191,8 @@ select
   a.emp_total / nullif(c.cell_area_m2 / 1e6, 0.0) as emp_per_km2_hex,
 
   a.last_load_ts
-from agg a
-join {{ ref('dim_h3_r7_cells') }} c
+from alloc a
+join {{ ref('dim_h3_r10_cells') }} c
   on c.region_code = a.region_code
  and c.region      = a.region
- and c.h3_r7       = a.h3_r7
+ and c.h3_r10      = a.h3_r10

@@ -4,7 +4,7 @@ models:
   - name: feat_h3_charging_r10
     description: >
       GOLD charging features on H3 R10.
-      Built by joining GOLD.FEAT_H3_POP_R10_FINAL (population + H3 cell geometry/area)
+      Built by joining GOLD.FEAT_H3_POP_R10 (population + H3 cell geometry/area)
       with SILVER.FEAT_H3_EV_CHARGERS_R10 (charger counts).
       No H3 recalculation in GOLD; H3 is canonical STRING.
 

@@ -1,7 +1,7 @@
 {{ config(
     materialized = 'table',
     file_format  = 'delta',
-    partition_by = ['region_code']
+    partition_by = ['region_code','region']
 ) }}
 
 with src as (
@@ -28,7 +28,7 @@ with src as (
     cast(source_file as string) as source_file,
     cast(load_ts as timestamp) as load_ts,
 
-    {{ osm_tags_json('other_tags') }} as tags
+    {{ osm_tags_json('other_tags_raw') }} as tags
   from {{ source('bronze','osm_buildings_activity') }}
   where geom_wkb is not null
 ),
@@ -71,11 +71,7 @@ base as (
 
     {{ osm_int('tags','building:levels') }} as building_levels,
 
-    coalesce(
-      element_at(tags,'operator'),
-      element_at(tags,'network'),
-      element_at(tags,'brand')
-    ) as operator_name,
+    coalesce(element_at(tags,'operator'), element_at(tags,'network'), element_at(tags,'brand')) as operator_name,
     element_at(tags,'opening_hours') as opening_hours,
 
     st_setsrid(st_geomfromwkb(geom_wkb), 4326) as geom,
@@ -95,6 +91,7 @@ filtered as (
   from base
   where feature_id is not null
     and geom is not null
+    and geom_wkt_4326 is not null
     and activity_class is not null
     and activity_type_lc is not null
 ),
@@ -103,7 +100,7 @@ dedup as (
   select *
   from filtered
   qualify row_number() over (
-    partition by feature_id
+    partition by region_code, region, feature_id
     order by load_ts desc, source_file desc
   ) = 1
 )

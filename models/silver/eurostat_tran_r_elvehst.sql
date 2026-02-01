@@ -2,7 +2,7 @@
     materialized = 'table',
     file_format  = 'delta',
     partition_by = ['snapshot'],
-    zorder_by    = ['geo', 'year', 'vehicle']
+    meta = {'zorder_by': ['geo', 'year', 'vehicle']}
 ) }}
 
 with base as (

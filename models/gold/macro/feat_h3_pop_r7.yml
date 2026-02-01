@@ -1,0 +1,57 @@
+version: 2
+
+models:
+  - name: feat_h3_pop_r7
+    tests:
+      - rowcount_gt_0
+      - not_empty
+
+    columns:
+      - name: region_code
+        tests:
+          - not_null
+
+      - name: h3_r7
+        tests:
+          - not_null
+
+      - name: cell_area_m2
+        tests:
+          - not_null
+          - non_negative
+
+      - name: cell_wkt_4326
+        tests:
+          - wkt_not_empty
+          - wkt_prefix_in:
+              prefixes: ['POLYGON']
+
+      - name: cell_center_wkt_4326
+        tests:
+          - wkt_not_empty
+          - wkt_prefix_in:
+              prefixes: ['POINT']
+
+      - name: pop_total
+        tests:
+          - non_negative
+
+      - name: emp_total
+        tests:
+          - non_negative
+
+      - name: pop_male
+        tests: [non_negative]
+      - name: pop_female
+        tests: [non_negative]
+      - name: pop_age_lt15
+        tests: [non_negative]
+      - name: pop_age_1564
+        tests: [non_negative]
+      - name: pop_age_ge65
+        tests: [non_negative]
+
+      - name: pop_method
+        tests:
+          - values_in_or_null:
+              values: ["census_grid_1km_to_h3_centroid_agg"]
