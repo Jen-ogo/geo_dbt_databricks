@@ -1,0 +1,25 @@
+version: 2
+
+models:
+  - name: dim_tomtom_ev_stations
+    description: "TomTom EV stations dimension enriched from TomTom EV Availability API."
+    tests:
+      - rowcount_gt_0
+      - not_empty
+
+    columns:
+      - name: TOMTOM_POI_ID
+        description: "TomTom POI id."
+        tests:
+          - not_null
+
+      - name: CHARGING_AVAILABILITY_ID
+        description: "TomTom chargingAvailability id (may repeat across pulls)."
+
+      - name: LAT
+        description: "Latitude in WGS84."
+      - name: LON
+        description: "Longitude in WGS84."
+
+      - name: UPDATED_AT
+        description: "Problematic timestamp field from API; temporarily not strictly tested until format is fixed."

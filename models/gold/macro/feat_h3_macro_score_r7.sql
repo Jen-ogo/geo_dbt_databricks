@@ -106,7 +106,7 @@ score as (
     degurba,
     k,
 
-    /* FIX: expose canonical name */
+    -- FIX: правильное имя
     center_cell_area_m2 as cell_area_m2,
     cell_wkt_4326,
     cell_center_wkt_4326,
@@ -129,6 +129,18 @@ score as (
     transit_points_cnt_kring,
     transit_lines_len_m_sum_kring,
 
+    -- ranks (нужны для дебага/анализа, и чтобы не было UNRESOLVED)
+    pr_pop,
+    pr_emp,
+    pr_bld_dens,
+    pr_poi_dens,
+    pr_transit_pts,
+    pr_transit_len,
+    pr_roads,
+    pr_ch_km2,
+    pr_ch_10k,
+
+    -- demand
     (
       {{ var('w_pop', 0.30) }} * pr_pop +
       {{ var('w_emp', 0.15) }} * pr_emp +
@@ -139,27 +151,20 @@ score as (
       {{ var('w_roads', 0.15) }} * pr_roads
     ) as demand_score,
 
-    /* supply with gated 10k */
+    -- supply (gating: если pop<min -> убираем компоненту per10k)
     case
       when chargers_per_10k_pop_kring_gated is null then
-        pr_ch_km2
+        ({{ var('w_supply_km2', 0.70) }} * pr_ch_km2)
       else
         ({{ var('w_supply_km2', 0.70) }} * pr_ch_km2 +
          {{ var('w_supply_10k', 0.30) }} * pr_ch_10k)
     end as supply_score
 
   from norm
-),
-
-final as (
-  select
-    s.*,
-
-    (demand_score - supply_score) as gap_score_raw,
-
-    (demand_score - supply_score) * coalesce(coverage_penalty, 1.0) as macro_score
-
-  from score s
 )
 
-select * from final
+select
+  s.*,
+  (demand_score - supply_score) as gap_score_raw,
+  (demand_score - supply_score) * coalesce(coverage_penalty, 1.0) as macro_score
+from score s

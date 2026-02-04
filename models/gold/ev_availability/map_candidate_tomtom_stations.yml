@@ -1,0 +1,8 @@
+version: 2
+
+models:
+  - name: map_candidate_tomtom_stations
+    description: "Mapping between internal candidate points and TomTom EV stations."
+    tests:
+      - rowcount_gt_0
+      - not_empty
