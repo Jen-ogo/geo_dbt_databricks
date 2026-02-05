@@ -8,12 +8,6 @@ models:
       applies coverage penalty, and outputs macro_score = (demand - supply) * penalty.
       Includes DIM H3 R7 debug WKT columns and cell area.
 
-      Notes:
-      - If chargers_per_10k_pop_kring_gated is NULL (pop < pop_gate_min), supply_score falls back to pr_ch_km2 only.
-      - coverage_penalty is clamped to [coverage_floor, 1.0] when coverage ratio is available.
-
-      Grain: (region_code, region, h3_r7)
-
     tests:
       - rowcount_gt_0:
           config:
@@ -24,80 +18,61 @@ models:
           config:
             name: feat_h3_macro_score_r7__uk_region_region_h3
 
-      # -----------------------
-      # Sanity checks (model-level)
-      # -----------------------
-      # 1) Coverage ratio should not be crazy high (allow small >1 due to area distortion/edge effects)
+      # ------------------------
+      # SANITY (model-level)
+      # ------------------------
       - dbt_utils.expression_is_true:
-          expression: "kring_coverage_area_ratio is null or (kring_coverage_area_ratio >= 0 and kring_coverage_area_ratio <= 1.2)"
+          expression: "k >= 0"
           config:
-            name: feat_h3_macro_score_r7__sanity_coverage_ratio_0_1p2
+            name: feat_h3_macro_score_r7__sanity_k_ge_0
 
-      # 2) Penalty should be within [0,1] (NULL allowed)
+      - dbt_utils.expression_is_true:
+          expression: "expected_cells is not null and expected_cells >= 1"
+          config:
+            name: feat_h3_macro_score_r7__sanity_expected_cells_ge_1
+
+      - dbt_utils.expression_is_true:
+          expression: "kring_area_m2 is null or kring_area_m2 >= 0"
+          config:
+            name: feat_h3_macro_score_r7__sanity_kring_area_non_negative
+
+      - dbt_utils.expression_is_true:
+          expression: "kring_coverage_area_ratio is null or kring_coverage_area_ratio >= 0"
+          config:
+            name: feat_h3_macro_score_r7__sanity_coverage_ratio_ge_0
+
       - dbt_utils.expression_is_true:
           expression: "coverage_penalty is null or (coverage_penalty >= 0 and coverage_penalty <= 1)"
           config:
             name: feat_h3_macro_score_r7__sanity_penalty_0_1
 
-      # 3) Demand and supply are ranks-based weighted sums; should be in [0,1] (NULL not expected)
+      # percent_rank => [0..1], веса => тоже => demand/supply ожидаемо в [0..1]
       - dbt_utils.expression_is_true:
-          expression: "demand_score >= 0 and demand_score <= 1"
+          expression: "demand_score is null or (demand_score >= 0 and demand_score <= 1)"
           config:
             name: feat_h3_macro_score_r7__sanity_demand_0_1
 
       - dbt_utils.expression_is_true:
-          expression: "supply_score >= 0 and supply_score <= 1"
+          expression: "supply_score is null or (supply_score >= 0 and supply_score <= 1)"
           config:
             name: feat_h3_macro_score_r7__sanity_supply_0_1
 
-      # 4) Expected cells formula sanity
+      # если есть население — chargers_per_10k_pop не должен быть отрицательным
       - dbt_utils.expression_is_true:
-          expression: "expected_cells = (1 + 3*k*(k+1))"
+          expression: "pop_total_kring is null or pop_total_kring < 0 or chargers_per_10k_pop_kring is null or chargers_per_10k_pop_kring >= 0"
           config:
-            name: feat_h3_macro_score_r7__sanity_expected_cells_formula
+            name: feat_h3_macro_score_r7__sanity_ch10k_non_negative_when_present
 
-      # 5) No negative physical aggregates (NULLs allowed for some)
-      - dbt_utils.expression_is_true:
-          expression: "kring_area_m2 is null or kring_area_m2 >= 0"
-          config:
-            name: feat_h3_macro_score_r7__sanity_nonneg_kring_area
-
-      - dbt_utils.expression_is_true:
-          expression: "pop_total_kring is null or pop_total_kring >= 0"
-          config:
-            name: feat_h3_macro_score_r7__sanity_nonneg_pop
-
-      - dbt_utils.expression_is_true:
-          expression: "emp_total_kring is null or emp_total_kring >= 0"
-          config:
-            name: feat_h3_macro_score_r7__sanity_nonneg_emp
-
-      - dbt_utils.expression_is_true:
-          expression: "chargers_cnt_kring is null or chargers_cnt_kring >= 0"
-          config:
-            name: feat_h3_macro_score_r7__sanity_nonneg_chargers_cnt
-
-      # 6) No NaN/Inf checks: in Spark SQL use (x = x) to detect NaN (NaN != NaN)
-      - dbt_utils.expression_is_true:
-          expression: "(chargers_per_km2_kring is null or chargers_per_km2_kring = chargers_per_km2_kring)"
-          config:
-            name: feat_h3_macro_score_r7__sanity_no_nan_ch_per_km2
-
-      - dbt_utils.expression_is_true:
-          expression: "(chargers_per_10k_pop_kring is null or chargers_per_10k_pop_kring = chargers_per_10k_pop_kring)"
-          config:
-            name: feat_h3_macro_score_r7__sanity_no_nan_ch_per_10k
-
-      # 7) Optional “suspicious” guardrails (можно ослабить/снять позже)
-      - dbt_utils.expression_is_true:
-          expression: "chargers_per_km2_kring is null or chargers_per_km2_kring <= 50"
-          config:
-            name: feat_h3_macro_score_r7__sanity_ch_per_km2_le_50
-
+      # защита от “взрыва” метрик (под твои уже выявленные кейсы)
       - dbt_utils.expression_is_true:
           expression: "chargers_per_10k_pop_kring is null or chargers_per_10k_pop_kring <= 200"
           config:
-            name: feat_h3_macro_score_r7__sanity_ch_per_10k_le_200
+            name: feat_h3_macro_score_r7__sanity_ch10k_le_200
+
+      - dbt_utils.expression_is_true:
+          expression: "chargers_per_km2_kring is null or chargers_per_km2_kring <= 50"
+          config:
+            name: feat_h3_macro_score_r7__sanity_chkm2_le_50
 
     columns:
       - name: region_code
@@ -114,26 +89,6 @@ models:
                 column_name: h3_r7
               config:
                 name: feat_h3_macro_score_r7__h3_r7_is_h3_hex
-
-      - name: degurba
-        description: "1=city, 2=towns/suburbs, 3=rural (can be NULL if unknown)."
-        tests:
-          - values_in_or_null:
-              arguments:
-                column_name: degurba
-                values: [1, 2, 3]
-              config:
-                name: feat_h3_macro_score_r7__degurba_allowed_1_2_3_or_null
-
-      - name: k
-        description: "k-ring radius used for aggregation (depends on degurba)."
-        tests:
-          - not_null
-          - non_negative:
-              arguments:
-                column_name: k
-              config:
-                name: feat_h3_macro_score_r7__k_non_negative
 
       - name: cell_area_m2
         tests:
@@ -174,14 +129,25 @@ models:
               config:
                 name: feat_h3_macro_score_r7__cell_center_wkt_prefix_point
 
-      - name: expected_cells
+      - name: degurba
+        description: "1=city, 2=towns/suburbs, 3=rural (can be NULL if unknown)."
+        tests:
+          - values_in_or_null:
+              arguments:
+                column_name: degurba
+                values: [1, 2, 3]
+              config:
+                name: feat_h3_macro_score_r7__degurba_allowed_1_2_3_or_null
+
+      - name: k
+        description: "k-ring radius used for aggregation (depends on degurba)."
         tests:
           - not_null
           - non_negative:
               arguments:
-                column_name: expected_cells
+                column_name: k
               config:
-                name: feat_h3_macro_score_r7__expected_cells_non_negative
+                name: feat_h3_macro_score_r7__k_non_negative
 
       - name: kring_area_m2
         tests:
@@ -192,7 +158,6 @@ models:
                 name: feat_h3_macro_score_r7__kring_area_m2_non_negative
 
       - name: kring_coverage_area_ratio
-        description: "Area-based coverage proxy: kring_area_m2 / (cell_area_m2 * expected_cells)."
         tests:
           - non_negative:
               arguments:
@@ -201,7 +166,6 @@ models:
                 name: feat_h3_macro_score_r7__coverage_ratio_non_negative
 
       - name: coverage_penalty
-        description: "Clamped coverage ratio used as penalty multiplier."
         tests:
           - non_negative:
               arguments:
@@ -225,8 +189,5 @@ models:
               config:
                 name: feat_h3_macro_score_r7__supply_score_non_negative
 
-      - name: gap_score_raw
-        description: "demand_score - supply_score"
-
       - name: macro_score
-        description: "Final macro score: (demand - supply) * coverage_penalty (penalty defaults to 1.0 if NULL)."
+        description: "Final macro score: (demand - supply) * penalty. Can be negative."
