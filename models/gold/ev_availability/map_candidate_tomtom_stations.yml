@@ -2,7 +2,59 @@ version: 2
 
 models:
   - name: map_candidate_tomtom_stations
-    description: "Mapping between internal candidate points and TomTom EV stations."
+    description: >
+      Mapping between candidate H3_R7 query points and TomTom POIs returned by POI Search.
+      Multiple rows per candidate (ranked by distance). Used for coverage/nearest-station enrichment.
     tests:
       - rowcount_gt_0
       - not_empty
+    columns:
+      - name: region_code
+        tests: [not_null]
+      - name: region
+        tests: [not_null]
+      - name: h3_r7
+        tests: [not_null]
+
+      - name: query_lat
+        tests:
+          - not_null
+          - dbt_utils.expression_is_true:
+              expression: "between -90 and 90"
+      - name: query_lon
+        tests:
+          - not_null
+          - dbt_utils.expression_is_true:
+              expression: "between -180 and 180"
+
+      - name: radius_m
+        tests:
+          - dbt_utils.expression_is_true:
+              expression: "> 0"
+
+      - name: tomtom_poi_id
+        tests: [not_null]
+
+      - name: dist_m
+        tests:
+          - non_negative
+
+      - name: score
+        description: TomTom search score (as returned by API).
+
+      - name: rank_by_dist
+        tests:
+          - dbt_utils.expression_is_true:
+              expression: ">= 1"
+
+      - name: load_ts
+        tests: [not_null]
+
+      - name: raw_search_json
+        description: Raw POI Search JSON payload serialized as string (audit/debug).
+
+      - name: degurba
+        description: Candidate DEGURBA class used for stratified sampling (1/2/3).
+        tests:
+          - values_in_or_null:
+              values: [1, 2, 3]

@@ -2,15 +2,36 @@ version: 2
 
 models:
   - name: fact_tomtom_ev_availability_snapshots
-    description: "TomTom EV availability snapshots (fact) captured over time from TomTom EV Availability API."
+    description: >
+      TomTom Charging Availability snapshots (fact). Multiple rows per charging_availability_id per snapshot_ts
+      and possibly per power level (power_kw). Contains availability counters and raw payload (JSON string).
     tests:
       - rowcount_gt_0
       - not_empty
-
     columns:
-      - name: TOMTOM_POI_ID
-        description: "TomTom POI id (if present in the model)."
-      - name: CHARGING_AVAILABILITY_ID
-        description: "Charging availability identifier from API (if present)."
-      - name: UPDATED_AT
-        description: "Snapshot timestamp; currently may contain unparseable values."
+      - name: charging_availability_id
+        tests: [not_null]
+      - name: snapshot_ts
+        tests: [not_null]
+      - name: connector_type
+        tests: [not_null]
+
+      - name: power_kw
+        tests:
+          - non_negative
+
+      - name: total
+        tests: [non_negative]
+      - name: available
+        tests: [non_negative]
+      - name: occupied
+        tests: [non_negative]
+      - name: reserved
+        tests: [non_negative]
+      - name: unknown
+        tests: [non_negative]
+      - name: out_of_service
+        tests: [non_negative]
+
+      - name: raw_avail_json
+        description: Raw availability JSON payload serialized as string (audit/debug).
