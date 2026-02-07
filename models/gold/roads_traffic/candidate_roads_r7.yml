@@ -1,0 +1,125 @@
+version: 2
+
+models:
+  - name: candidate_roads_r7
+    description: >
+      GOLD. Candidate roads for traffic/DAC selection for top macro-score H3 R7 cells.
+      Major roads within candidate H3 R7 cells + roads near EV stations inside those cells (station-centric),
+      then union + dedup preferring station_centric.
+    config:
+      tags: ['gold','roads_traffic','heavy']
+
+    tests:
+      - rowcount_gt_0
+      - not_empty
+
+      - values_in_or_null:
+          column_name: degurba
+          values: ['1','2','3']
+
+      - unique_combination_of_columns:
+          columns: ['region_code','region','h3_r7','road_feature_id']
+
+      # ---- column constraints via model-level expressions (because expression_is_true doesn't accept column_name) ----
+      - expression_is_true:
+          arguments:
+            expression: "region_code is not null and trim(region_code) <> ''"
+
+      - expression_is_true:
+          arguments:
+            expression: "region is not null and trim(region) <> ''"
+
+      - expression_is_true:
+          arguments:
+            expression: "h3_r7 is not null and trim(h3_r7) <> ''"
+
+      - expression_is_true:
+          arguments:
+            expression: "macro_score is not null"
+
+      - expression_is_true:
+          arguments:
+            expression: "traffic_scope in ('candidate_area','station_centric')"
+
+      - expression_is_true:
+          arguments:
+            expression: "near_ev_station is not null"
+
+      - expression_is_true:
+          arguments:
+            expression: "(traffic_scope = 'station_centric' and ev_station_id is not null) or (traffic_scope <> 'station_centric' and ev_station_id is null)"
+
+      - expression_is_true:
+          arguments:
+            expression: "road_feature_id is not null and trim(road_feature_id) <> ''"
+
+      - expression_is_true:
+          arguments:
+            expression: "road_osm_id is not null and trim(road_osm_id) <> ''"
+
+      - expression_is_true:
+          arguments:
+            expression: "highway in ('motorway','motorway_link','trunk','trunk_link','primary','primary_link','secondary','secondary_link','tertiary','tertiary_link')"
+
+      - expression_is_true:
+          arguments:
+            expression: "road_len_m is not null and road_len_m >= 0"
+
+    columns:
+      - name: region_code
+        description: Region code (e.g. country).
+
+      - name: region
+        description: Region name / admin region.
+
+      - name: h3_r7
+        description: H3 index (resolution 7) of the candidate cell.
+        tests:
+          - is_h3_hex:
+              column_name: h3_r7
+
+      - name: degurba
+        description: Degree of urbanisation (1=Cities, 2=Towns/suburbs, 3=Rural).
+
+      - name: macro_score
+        description: Macro gap score used to rank candidate cells (higher = more priority).
+
+      - name: traffic_scope
+        description: candidate_area or station_centric.
+
+      - name: near_ev_station
+        description: True if station-centric selection.
+
+      - name: ev_station_id
+        description: EV station feature_id if station-centric, otherwise NULL.
+
+      - name: road_feature_id
+        description: Canonical road feature id.
+
+      - name: road_osm_id
+        description: Original OSM id (string).
+
+      - name: highway
+        description: OSM highway class (major roads only).
+
+      - name: maxspeed_kph
+        description: Max speed in kph, nullable (parsed from OSM tags).
+        tests:
+          - non_negative:
+              column_name: maxspeed_kph
+
+      - name: lanes
+        description: Number of lanes, nullable (parsed from OSM tags).
+        tests:
+          - non_negative:
+              column_name: lanes
+
+      - name: road_len_m
+        description: Road length in meters (EPSG:3035).
+
+      - name: road_centroid_wkt_4326
+        description: WKT of road centroid in EPSG:4326 (POINT).
+        tests:
+          - wkt_prefix_in:
+              column_name: road_centroid_wkt_4326
+              prefixes: ['POINT(']

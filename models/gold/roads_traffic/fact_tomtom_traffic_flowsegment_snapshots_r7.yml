@@ -1,0 +1,181 @@
+version: 2
+
+models:
+  - name: fact_tomtom_traffic_flowsegment_snapshots_r7
+    description: >
+      TomTom Traffic flowSegmentData snapshots for candidate roads (R7).
+      One row = one candidate road (GOLD.CANDIDATE_ROADS_R7) + one TomTom response
+      at the road centroid (absolute/10). Landed directly to GOLD for DAC usage.
+    config:
+      tags: ['gold','roads_traffic','tomtom','traffic','r7','heavy']
+
+    columns:
+      - name: run_id
+        description: DAC run identifier (uuid/timestamp string).
+
+      - name: snapshot_ts
+        description: Snapshot timestamp (UTC).
+
+      - name: request_point_key
+        description: Deterministic key of request point (e.g. "lat,lon" rounded).
+
+      - name: request_point_lat
+        description: Request centroid latitude.
+        tests:
+          - num_between_or_null:
+              arguments:
+                min_value: -90
+                max_value: 90
+
+      - name: request_point_lon
+        description: Request centroid longitude.
+        tests:
+          - num_between_or_null:
+              arguments:
+                min_value: -180
+                max_value: 180
+
+      - name: tomtom_zoom
+        description: TomTom zoom for flowSegmentData (absolute/10).
+        tests:
+          - non_negative:
+              arguments:
+                column_name: tomtom_zoom
+
+      - name: tomtom_version
+        description: API response version field (flowSegmentData.@version).
+
+      - name: region_code
+        description: Region code (country), lower-case.
+      - name: region
+        description: Region name / administrative region.
+
+      - name: h3_r7
+        description: Candidate H3 cell (resolution 7).
+        tests:
+          - is_h3_hex:
+              arguments:
+                column_name: h3_r7
+
+      - name: degurba
+        description: DEGURBA class (1/2/3).
+        tests:
+          - values_in_or_null:
+              arguments:
+                column_name: degurba
+                values: ['1','2','3']
+
+      - name: macro_score
+        description: Macro gap score (from macro scoring).
+
+      - name: traffic_scope
+        description: candidate_area | station_centric
+        tests:
+          - values_in_or_null:
+              arguments:
+                column_name: traffic_scope
+                values: ['candidate_area','station_centric']
+
+      - name: near_ev_station
+        description: True if station-centric.
+      - name: ev_station_id
+        description: EV station id if station-centric, else NULL.
+
+      - name: road_feature_id
+        description: Road feature id.
+      - name: road_osm_id
+        description: OSM id.
+      - name: highway
+        description: OSM highway class.
+
+      - name: maxspeed_kph
+        description: Parsed maxspeed in kph (nullable).
+        tests:
+          - non_negative:
+              arguments:
+                column_name: maxspeed_kph
+
+      - name: lanes
+        description: Parsed lanes (nullable).
+        tests:
+          - non_negative:
+              arguments:
+                column_name: lanes
+
+      - name: road_len_m
+        description: Road segment length in meters.
+        tests:
+          - non_negative:
+              arguments:
+                column_name: road_len_m
+
+      - name: road_centroid_wkt_4326
+        description: Road centroid WKT in EPSG:4326 (POINT(lon lat)).
+        tests:
+          - wkt_prefix_any:
+              arguments:
+                column_name: road_centroid_wkt_4326
+                prefixes: ['POINT(']
+
+      - name: frc
+        description: TomTom functional road class.
+      - name: current_speed
+        description: Current speed (km/h).
+        tests:
+          - non_negative:
+              arguments:
+                column_name: current_speed
+      - name: free_flow_speed
+        description: Free flow speed (km/h).
+        tests:
+          - non_negative:
+              arguments:
+                column_name: free_flow_speed
+      - name: current_travel_time
+        description: Current travel time (seconds).
+        tests:
+          - non_negative:
+              arguments:
+                column_name: current_travel_time
+      - name: free_flow_travel_time
+        description: Free flow travel time (seconds).
+        tests:
+          - non_negative:
+              arguments:
+                column_name: free_flow_travel_time
+
+      - name: confidence
+        description: Confidence score (0..1).
+        tests:
+          - num_between_or_null:
+              arguments:
+                min_value: 0
+                max_value: 1
+
+      - name: road_closure
+        description: Road closure flag.
+
+      - name: segment_linestring_wkt_4326
+        description: Segment polyline as WKT LINESTRING in EPSG:4326.
+        tests:
+          - wkt_prefix_any:
+              arguments:
+                column_name: segment_linestring_wkt_4326
+                prefixes: ['LINESTRING(']
+
+      - name: segment_coords_json
+        description: Raw coordinate array (TomTom) as JSON string (optional).
+
+      - name: speed_ratio
+        description: current_speed / free_flow_speed (nullable).
+      - name: delay_sec
+        description: current_travel_time - free_flow_travel_time (nullable).
+      - name: delay_ratio
+        description: current_travel_time / free_flow_travel_time (nullable).
+
+      - name: http_status
+        description: HTTP status for TomTom request.
+      - name: error_message
+        description: Error message if request/parsing failed.
+      - name: raw_json
+        description: Full raw response JSON (string).
